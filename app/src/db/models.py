@@ -5,9 +5,10 @@ from .database import Base
 class SysSettings(Base):
     __tablename__ = "sys_settings"
 
-    key = Column(String(50), primary_key=True, index=True)
-    value = Column(String(255))
-    description = Column(String(255))
+    key = Column(String(64), primary_key=True, index=True)
+    value = Column(Text, nullable=False)
+    category = Column(String(32), index=True, default="common")
+    description = Column(String(255), default="")
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), default=func.now())
 
 class CalibRecord(Base):
