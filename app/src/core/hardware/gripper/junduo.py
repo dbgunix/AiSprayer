@@ -205,7 +205,7 @@ class JunduoGripper:
         try:
             with self._io_lock:
                 # 第一个参数是 ModbusCreate 返回的设备索引 (0-4)，不是从站号！
-                res = self.dashboard.SetHoldRegs(self.device_index, start_addr, count, val_str, "U16")
+                res = self.dashboard.SetHoldRegs(self.device_index, start_addr, count, val_str, "U16", timeout=2.0)
             # 越疆返回 0 代表下发成功，格式通常为: "0,{},SetHoldRegs(...)"
             if res and res.startswith("0"):
                 return True
@@ -215,38 +215,48 @@ class JunduoGripper:
             logger.error(f"SetHoldRegs 通信异常: {e}")
             return False
 
-    def _read_reg(self, addr: int) -> int:
+    def _read_reg(self, addr: int, timeout: float = 1.5) -> int:
         """底层读取封装：读取单个保持寄存器"""
         if self.device_index < 0:
             return -1
         try:
             with self._io_lock:
-                res = self.dashboard.GetHoldRegs(self.device_index, addr, 1, "U16")
+                res = self.dashboard.GetHoldRegs(self.device_index, addr, 1, "U16", timeout=timeout)
             # 返回格式: "0,{val},GetHoldRegs(...)"
             if res and res.startswith("0"):
                 parts = res.split("{")
                 if len(parts) > 1:
-                    val = parts[1].split("}")[0].strip()
-                    return int(val)
+                    raw_val = parts[1].split("}")[0].strip()
+                    if "," in raw_val:
+                        raw_val = raw_val.split(",")[0].strip()
+                    try:
+                        return int(raw_val)
+                    except ValueError:
+                        logger.warning(f"GetHoldRegs(0x{addr:04X}) 无法解析整数: '{raw_val}'")
             else:
                 logger.debug(f"GetHoldRegs(0x{addr:04X}) 返回: {res}")
         except Exception as e:
             logger.warning(f"GetHoldRegs(0x{addr:04X}) 异常: {e}")
         return -1
 
-    def _read_regs(self, addr: int, count: int) -> list:
+    def _read_regs(self, addr: int, count: int, timeout: float = 1.5) -> list:
         """底层批量读取封装：读取连续保持寄存器 (单包 Modbus 批量查询)"""
         if self.device_index < 0:
             return []
         try:
             with self._io_lock:
-                res = self.dashboard.GetHoldRegs(self.device_index, addr, count, "U16")
+                res = self.dashboard.GetHoldRegs(self.device_index, addr, count, "U16", timeout=timeout)
             if res and res.startswith("0"):
                 parts = res.split("{")
                 if len(parts) > 1:
                     raw_str = parts[1].split("}")[0].strip()
                     if raw_str:
-                        return [int(v.strip()) for v in raw_str.split(",") if v.strip()]
+                        result = []
+                        for v in raw_str.split(","):
+                            v = v.strip()
+                            if v and (v.isdigit() or (v.startswith('-') and v[1:].isdigit())):
+                                result.append(int(v))
+                        return result
             else:
                 logger.debug(f"GetHoldRegs(0x{addr:04X}, count={count}) 返回: {res}")
         except Exception as e:
@@ -282,11 +292,8 @@ class JunduoGripper:
 
             return state, stroke_mm, force_n
 
-        # 回退单寄存器读取逻辑
-        state = self.get_state()
-        pos = self.get_position()
-        force = self.get_hold_force()
-        return state, pos, force
+        # 单包批量读取失败时，不继续执行 3 次独立的单寄存器查询，避免在 RS485 未就绪时长时间锁死 29999 端口
+        return self.last_state, self.last_position_mm, self.last_force_n
     def init_gripper(self, timeout: float = 5.0) -> bool:
         """
         夹爪初始化 / 上电回零 (动作前必须调用一次)

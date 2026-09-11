@@ -152,7 +152,7 @@ const RobotZone: React.FC<RobotZoneProps> = ({
       {/* Robot 3D Viewer with Surface Mesh Overlay & 3D TCP Trajectories */}
       <div className="flex-1 min-h-0 bg-slate-900/80 rounded-xl border border-slate-800 shadow-lg flex flex-col shrink-0 p-1 relative overflow-hidden">
         <Robot3DViewer
-          jointAngles={robotState.joint}
+          jointAngles={robotState.joint ?? [0, 0, 0, 0, 0, 0]}
           gripperStroke={robotState.gripper?.position_mm}
           activeTemplate={activeTemplate}
           meshVersion={meshVersion}

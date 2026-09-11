@@ -216,8 +216,8 @@ const InteractiveOp: React.FC<InteractiveOpProps> = ({
           const msg = JSON.parse(e.data) as { type: string; data: any };
 
           if (msg.type === 'robot_state') {
-            // Mark robot as connected any time we get a valid state push
-            setRobotConnected(true);
+            const isConn = msg.data?.connected !== undefined ? Boolean(msg.data.connected) : true;
+            setRobotConnected(isConn);
             if (typeof msg.data?.status === 'number') {
               setRobotStatus(msg.data.status);
             }

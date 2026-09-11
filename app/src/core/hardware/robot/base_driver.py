@@ -370,6 +370,11 @@ class BaseRobotDriver(ABC):
                 # 轨迹中断时立即强制关喷 (立即指令，不受残留队列指令影响)
                 self.set_do(spray_do_index, 0, immediate=True)
                 return res
+
+        # 所有分段执行完毕，若喷涂仍处于开启状态，必须主动安全关喷 (立即指令)
+        if do_status == 1:
+            logger.info(f"move_l_segments: 所有分段执行完毕，关闭喷涂 DO({spray_do_index}) (立即指令)")
+            self.set_do(spray_do_index, 0, immediate=True)
         return 0
 
     def set_do(self, index: int, status: int, immediate: bool = False) -> bool:

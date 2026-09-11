@@ -168,6 +168,54 @@ class TestRobotService(unittest.TestCase):
         success, msg = self.service.jog_step("X", 1, 10.0)
         self.assertTrue(success)
 
+    def test_go_home_and_fold_ensure_spray_do_off(self):
+        mock_driver = MagicMock(spec=BaseRobotDriver)
+        mock_driver.is_connected = True
+        mock_driver.go_home.return_value = 0
+        mock_driver.set_do.return_value = True
+        mock_driver.move_joint.return_value = 0
+        mock_driver.get_current_joint.return_value = [0.0] * 6
+
+        self.service._driver = mock_driver
+        self.service._is_connected = True
+
+        # go_home should call set_do(spray_do_index, 0, immediate=True)
+        success, msg = self.service.go_home(speed=20.0, acc=20.0)
+        self.assertTrue(success)
+        mock_driver.set_do.assert_called_with(self.service.spray_do_index, 0, immediate=True)
+
+        # go_fold should also call set_do(spray_do_index, 0, immediate=True)
+        mock_driver.set_do.reset_mock()
+        success, msg = self.service.go_fold(speed=20.0, acc=20.0)
+        self.assertTrue(success)
+        mock_driver.set_do.assert_called_with(self.service.spray_do_index, 0, immediate=True)
+
+    def test_base_driver_move_l_segments_turns_off_do_on_complete(self):
+        with patch.object(BaseRobotDriver, "__abstractmethods__", set()):
+            class DummyDriver(BaseRobotDriver):
+                def __init__(self):
+                    super().__init__()
+                    self.do_calls = []
+                    self.queue_calls = []
+
+                def set_do(self, index: int, status: int, immediate: bool = False) -> bool:
+                    self.do_calls.append((index, status, immediate))
+                    return True
+
+                def move_l_queue(self, poses, velocity=100.0, acc=80.0, dec=80.0, tool_num=None, wait=True, cp_ratio=50) -> int:
+                    self.queue_calls.append((poses, wait))
+                    return 0
+
+            driver = DummyDriver()
+        segments = [
+            {"spraying": True, "poses": [RobotPose(x=10, y=20, z=30)]},
+        ]
+        ret = driver.move_l_segments(segments, spray_do_index=1)
+        self.assertEqual(ret, 0)
+        # First call: queue DO 1; Second call after segments complete: immediate DO 0
+        self.assertEqual(driver.do_calls[0], (1, 1, False))
+        self.assertEqual(driver.do_calls[-1], (1, 0, True))
+
 
 if __name__ == "__main__":
     unittest.main()

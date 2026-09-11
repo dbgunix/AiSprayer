@@ -19,9 +19,10 @@ interface GripperSpecs {
 }
 
 interface RobotState {
-  pose: number[];
-  joint: number[];
+  pose?: number[];
+  joint?: number[];
   status?: number;
+  connected?: boolean;
   tcp_speed_actual?: number[];
   qd_actual?: number[];
   load?: number;
@@ -56,9 +57,13 @@ const JogControlPanel: React.FC<JogControlPanelProps> = ({ robotState }) => {
   const effMaxLinSpeed = Math.max(10, Math.round(maxTcpSpeed * (globalSpeedFactor / 100.0)));
   const effMaxJntSpeed = Math.max(5, Math.round(maxJointSpeed * (globalSpeedFactor / 100.0)));
 
-  // Use prop robotState if provided, else fall back to internal zeros
-  const displayState: RobotState = robotState ?? { pose: [0, 0, 0, 0, 0, 0], joint: [0, 0, 0, 0, 0, 0] };
-  const [robotConnected, setRobotConnected] = useState<boolean>(false);
+  // Use prop robotState if provided, ensuring pose and joint arrays are never undefined
+  const displayState: RobotState = {
+    ...robotState,
+    pose: robotState?.pose ?? [0, 0, 0, 0, 0, 0],
+    joint: robotState?.joint ?? [0, 0, 0, 0, 0, 0],
+  };
+  const [robotConnected, setRobotConnected] = useState<boolean>(robotState?.connected ?? false);
   const [connecting, setConnecting] = useState<boolean>(false);
   const [activeAction, setActiveAction] = useState<'home' | 'zero' | 'fold' | null>(null);
 
@@ -96,6 +101,12 @@ const JogControlPanel: React.FC<JogControlPanelProps> = ({ robotState }) => {
   const gripperIsOpen = isGripperConnected && (displayState.gripper?.position_mm ?? 0) > maxStrokeMm * 0.5;
 
   const wsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    if (robotState?.connected !== undefined) {
+      setRobotConnected(robotState.connected);
+    }
+  }, [robotState?.connected]);
 
   useEffect(() => {
     if (!isMoving) {
@@ -391,7 +402,7 @@ const JogControlPanel: React.FC<JogControlPanelProps> = ({ robotState }) => {
   ];
 
   const renderAxisRow = (axis: { name: string, unit: string }, idx: number, isJoint: boolean) => {
-    const currentValues = isJoint ? displayState.joint : displayState.pose;
+    const currentValues = (isJoint ? displayState.joint : displayState.pose) ?? [0, 0, 0, 0, 0, 0];
 
     const formatValue = (idx: number, isJoint: boolean) => {
       let val = currentValues[idx];

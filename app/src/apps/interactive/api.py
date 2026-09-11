@@ -990,6 +990,16 @@ def execute_yaml_path(name: str, req: ExecuteYamlPathRequest):
             )
 
         # 4. 轨迹全部执行完毕后回位至 Home
+        # 工业安全与工艺防护：在轨迹执行结束、回 Home 动作触发前，强制确保喷涂 DO 关闭 (立即指令毫秒级关断，杜绝回程误喷拉丝)
+        logger.info(f"execute_yaml_path: Ensuring spray DO (index {target_do_index}) is OFF before returning to Home...")
+        try:
+            off_ok, off_err = robot_service.set_do(target_do_index, 0, immediate=True)
+            if not off_ok:
+                logger.warning(f"execute_yaml_path: Warning when ensuring DO({target_do_index}, 0) before returning Home: {off_err}")
+            time.sleep(0.02)
+        except Exception as do_err:
+            logger.warning(f"execute_yaml_path: Exception when turning off DO before returning Home: {do_err}")
+
         robot_service.broadcast_exec_status(action="Trajectory complete, returning to Home...", stage="returning_home")
         logger.info(f"execute_yaml_path: Returning robot to Home position after trajectory (speed_j={speed_j}%, acc_j={acc_j}%)...")
         home_ok, home_err = robot_service.go_home(speed=speed_j, acc=acc_j)

@@ -542,6 +542,14 @@ class DobotApi:
             logger.info("Connecting to Dobot at %s:%d (timeout=%.1fs)...", self.ip, self.port, self.connect_timeout)
             sock = socket.create_connection((self.ip, self.port), timeout=self.connect_timeout)
             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            if hasattr(socket, "TCP_KEEPIDLE"):
+                try:
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 5)
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 2)
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+                except OSError:
+                    pass
             sock.settimeout(self.reply_timeout)
             self.socket_dobot = sock
             self._recv_buffer.clear()
@@ -632,6 +640,8 @@ class DobotApi:
             while REPLY_TERMINATOR not in self._recv_buffer:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
+                    logger.warning("Timeout waiting for reply from %s:%d (%.1fs). Forcibly closing socket to prevent protocol desync.", self.ip, self.port, limit)
+                    self._close_socket()
                     raise DobotTimeoutError(
                         f"等待 {self.ip}:{self.port} 应答超时（{limit}s），"
                         f"已收到 {bytes(self._recv_buffer)!r}")
@@ -639,6 +649,8 @@ class DobotApi:
                 try:
                     chunk = sock.recv(1024)
                 except socket.timeout as exc:
+                    logger.warning("Socket timeout waiting for reply from %s:%d (%.1fs). Forcibly closing socket to prevent protocol desync.", self.ip, self.port, limit)
+                    self._close_socket()
                     raise DobotTimeoutError(
                         f"等待 {self.ip}:{self.port} 应答超时（{limit}s）") from exc
                 except OSError as exc:
@@ -700,11 +712,23 @@ class DobotApi:
             self.log(f"Discard stale data from {self.ip}:{self.port}: {bytes(discarded)!r}")
 
     def sendRecvMsg(self, string: str, timeout: Optional[float] = None) -> str:
-        """下发指令并返回原始应答字符串（一问一答，全程持锁）。"""
+        """下发指令并返回原始应答字符串（一问一答，全程持锁）。连接异常断开时自动重连并重试一次。"""
         with self._globalLock:
-            self._discard_pending()
-            self.send_data(string)
-            return self.wait_reply(timeout)
+            for attempt in range(2):
+                try:
+                    self._discard_pending()
+                    self.send_data(string)
+                    return self.wait_reply(timeout)
+                except DobotConnectionError as err:
+                    if attempt == 0 and not self._is_closed and self.auto_reconnect:
+                        logger.warning(
+                            "sendRecvMsg to %s:%d failed with connection error (%s); attempting auto-reconnect and retry...",
+                            self.ip, self.port, err
+                        )
+                        if self.reconnect():
+                            time.sleep(0.1)
+                            continue
+                    raise
 
     def sendRecvChecked(self, string: str, timeout: Optional[float] = None) -> DobotResponse:
         """下发指令并校验 ErrorID，非 0 时抛出 DobotCommandError。"""
@@ -1344,33 +1368,35 @@ class DobotApiDashboard(DobotApi):
             _table(valTab, "valTab"))
         return self.sendRecvMsg(string)
 
-    def GetHoldRegs(self, index, addr, count, valType=None):
+    def GetHoldRegs(self, index, addr, count, valType=None, timeout: Optional[float] = None):
         """读取保持寄存器的值。
 
         index   主站索引，取值范围 [0,4]
         addr    保持寄存器起始地址
         count   连续读取的数量，取值范围 [1,4]
         valType 可选。为空或 U16 表示 16 位无符号整数，另可取 U32/F32/F64
+        timeout 等待应答超时（秒），为 None 时使用默认 reply_timeout
         """
         string = "GetHoldRegs({:d},{:d},{:d}".format(
             _as_int(index, "index"), _as_int(addr, "addr"), _as_int(count, "count"))
         if valType is not None:
             string += ",{:s}".format(_as_name(valType, "valType"))
-        return self.sendRecvMsg(string + ")")
+        return self.sendRecvMsg(string + ")", timeout=timeout)
 
-    def SetHoldRegs(self, index, addr, count, valTab, valType=None):
+    def SetHoldRegs(self, index, addr, count, valTab, valType=None, timeout: Optional[float] = None):
         """将指定的值写入保持寄存器。
 
         count   连续写入的数量，取值范围 [1,4]
         valTab  要写入的值，数量与 count 相同，格式 {6000,300}
         valType 可选。为空或 U16 表示 16 位无符号整数，另可取 U32/F32/F64
+        timeout 等待应答超时（秒），为 None 时使用默认 reply_timeout
         """
         string = "SetHoldRegs({:d},{:d},{:d},{:s}".format(
             _as_int(index, "index"), _as_int(addr, "addr"), _as_int(count, "count"),
             _table(valTab, "valTab"))
         if valType is not None:
             string += ",{:s}".format(_as_name(valType, "valType"))
-        return self.sendRecvMsg(string + ")")
+        return self.sendRecvMsg(string + ")", timeout=timeout)
 
     # ---- 以下指令未在控制柜 V3 六轴 TCP/IP 协议中定义 ----
     # 保留是为了兼容既有调用，但控制器可能返回 -10000（命令不存在）。

@@ -175,9 +175,31 @@ class RobotService:
             # Notify WebSocket clients that robot is disconnected
             disconnected_payload = {
                 "connected": False,
+                "pose": [0.0] * 6,
+                "joint": [0.0] * 6,
                 "status": 0,
+                "tcp_speed_actual": [0.0] * 6,
+                "tcp_speed_mm_s": 0.0,
+                "qd_actual": [0.0] * 6,
+                "load": 0.0,
+                "error_status": 0,
+                "error_details": [],
+                "tool_vector_actual": [0.0] * 6,
+                "hand_type": [0, 0, 0, 0],
+                "tool_index": 0,
+                "run_queued_cmd": 0,
+                "velocity_ratio": 0,
+                "xyz_velocity_ratio": 0,
+                "r_velocity_ratio": 0,
                 "digital_outputs": [0] * 16,
                 "digital_output_bits": 0,
+                "gripper": {
+                    "connected": False,
+                    "position_mm": 0.0,
+                    "state": "DISCONNECTED",
+                    "force_n": 0.0,
+                    "specs": None,
+                },
             }
             for cb in list(self._ws_callbacks):
                 try:
@@ -533,6 +555,12 @@ class RobotService:
             logger.error(msg)
             return False, msg
 
+        # 安全防护：机械臂回零前强制确保喷涂 DO 处于关闭状态 (置 0)
+        try:
+            self.set_do(self.spray_do_index, 0, immediate=True)
+        except Exception as e:
+            logger.warning(f"go_zero: Warning ensuring spray DO is OFF: {e}")
+
         try:
             return self.move_to_joint([0.0, 0.0, 0.0, 0.0, 0.0, 0.0], speed=speed, acc=acc)
         except Exception as e:
@@ -547,6 +575,12 @@ class RobotService:
             logger.error(msg)
             return False, msg
 
+        # 安全防护：机械臂折叠前强制确保喷涂 DO 处于关闭状态 (置 0)
+        try:
+            self.set_do(self.spray_do_index, 0, immediate=True)
+        except Exception as e:
+            logger.warning(f"go_fold: Warning ensuring spray DO is OFF: {e}")
+
         try:
             return self.move_to_joint([0.0, 0.0, -156.0, 0.0, -170.0, 0.0], speed=speed, acc=acc)
         except Exception as e:
@@ -560,6 +594,12 @@ class RobotService:
             msg = "go_home: Robot is not connected"
             logger.error(msg)
             return False, msg
+
+        # 安全防护：机械臂回原点前强制确保喷涂 DO 处于关闭状态 (置 0)
+        try:
+            self.set_do(self.spray_do_index, 0, immediate=True)
+        except Exception as e:
+            logger.warning(f"go_home: Warning ensuring spray DO is OFF: {e}")
 
         try:
             res = self._driver.go_home(wait=True, velocity=speed, acc=acc)

@@ -12,6 +12,7 @@ interface RobotState {
   pose: number[];
   joint: number[];
   status?: number;
+  connected?: boolean;
   tcp_speed_actual?: number[];
   tcp_speed_mm_s?: number;
   qd_actual?: number[];
@@ -60,7 +61,14 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-          if (msg.type === 'robot_state') setRobotState(msg.data);
+          if (msg.type === 'robot_state' && msg.data) {
+            setRobotState((prev) => ({
+              ...prev,
+              ...msg.data,
+              pose: msg.data.pose ?? prev.pose ?? [0, 0, 0, 0, 0, 0],
+              joint: msg.data.joint ?? prev.joint ?? [0, 0, 0, 0, 0, 0],
+            }));
+          }
         } catch {}
       };
       ws.onclose = () => setTimeout(connect, 2000);
