@@ -1,4 +1,5 @@
 import math
+import time
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -323,6 +324,8 @@ class BaseRobotDriver(ABC):
         tool_num: Optional[int] = None,
         cp_ratio: int = 50,
         spray_do_index: int = 1,
+        spray_on_delay_ms: int = 0,
+        spray_off_delay_ms: int = 0,
     ) -> int:
         """
         分段执行连续笛卡尔直线轨迹 (MoveL)，并按各段的 spraying 状态在段边界切换喷涂 DO。
@@ -338,6 +341,8 @@ class BaseRobotDriver(ABC):
         :param tool_num: 工具坐标系编号 (None 时使用驱动层当前工具)
         :param cp_ratio: 连续路径平滑过渡比例 (0-100)
         :param spray_do_index: 喷涂开关 DO 端口编号
+        :param spray_on_delay_ms: 开喷 DO 下发后的驻留时长 (ms)，补偿喷枪建压延迟；0 = 不驻留
+        :param spray_off_delay_ms: 关喷 DO 下发后的驻留时长 (ms)，补偿喷枪断料延迟；0 = 不驻留
         :return: 0 成功，非 0 失败
         """
         # 只有最后一个含有效位姿的段需要 wait (等整条轨迹真正执行完)，其余段发送后立即排队下一批指令
@@ -358,6 +363,12 @@ class BaseRobotDriver(ABC):
                     self.set_do(spray_do_index, 0, immediate=True)
                     return -1
                 do_status = target_status
+                # 喷枪物理开/关存在响应延迟：下发队列 DO 后按配置驻留对应毫秒数，
+                # 让喷枪真正建压开喷 / 完全断料后再继续下发本段 MoveL。0 (默认) = 不驻留，保持原 CP 行为。
+                delay_ms = spray_on_delay_ms if target_status == 1 else spray_off_delay_ms
+                if delay_ms and delay_ms > 0:
+                    logger.info(f"move_l_segments: 喷枪{'开' if target_status == 1 else '关'}延迟驻留 {delay_ms} ms")
+                    time.sleep(delay_ms / 1000.0)
 
             res = self.move_l_queue(
                 poses,

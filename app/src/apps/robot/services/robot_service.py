@@ -444,6 +444,9 @@ class RobotService:
 
         logger.info(f"move_l_segments: executing {len(norm_segments)} segments ({total_pts} points), "
                     f"speed:{speed_val} mm/s, acc:{acc_val}%, cp:{cp_ratio}, DO:{eff_do}, tool:{eff_tool}")
+        # 喷枪开/关物理响应延迟 (ms)：由服务层读配置，以显式参数下发给驱动层 (驱动不感知配置)。
+        spray_on_delay = int(getattr(self._config, "spray_on_delay_ms", 0) or 0)
+        spray_off_delay = int(getattr(self._config, "spray_off_delay_ms", 0) or 0)
         try:
             res = self._driver.move_l_segments(
                 norm_segments,
@@ -453,6 +456,8 @@ class RobotService:
                 tool_num=eff_tool,
                 cp_ratio=cp_ratio,
                 spray_do_index=eff_do,
+                spray_on_delay_ms=spray_on_delay,
+                spray_off_delay_ms=spray_off_delay,
             )
             if res == 0:
                 logger.info(f"move_l_segments: Successfully executed {len(norm_segments)} segments.")

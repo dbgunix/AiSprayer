@@ -618,6 +618,11 @@ class WaypointPlanner:
             sample_d = np.arange(0.0, total, pt_s)
             if sample_d.size == 0:
                 continue
+            # 补行末端点: arange 严格 < total 会丢掉每行沿主轴 (edge_axis) 的极值端点,
+            # 即 PCA 上下两个顶点所在行够不到真正的边界。显式并入 total;
+            # 与末个采样点几乎重合 (< 1/4 点距) 时跳过, 避免生成重复航点。
+            if total - float(sample_d[-1]) > pt_s * 0.25:
+                sample_d = np.append(sample_d, total)
             sampled = np.zeros((sample_d.size, 3), dtype=np.float64)
             for i in range(3):
                 sampled[:, i] = np.interp(sample_d, cum, sorted_pts[:, i])

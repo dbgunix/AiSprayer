@@ -199,6 +199,12 @@ std::vector<OrientedSample> zigzagSample(const Mesh& slice_mesh,
             const double t = (c1 > c0) ? (d - c0) / (c1 - c0) : 0;
             sampled.push_back(pts[i - 1] + t * (pts[i] - pts[i - 1]));
         }
+        // 补行末端点: 上面 d<total 的严格循环会丢掉每行沿主轴 (edge_axis) 的极值端点,
+        // 即 PCA 上下两个顶点所在行够不到真正的边界。显式并入终点 pts.back();
+        // 与已采样末点几乎重合 (< 1/4 点距) 时跳过, 避免生成重复航点。
+        if (!sampled.empty() && (pts.back() - sampled.back()).norm() > pt_s * 0.25) {
+            sampled.push_back(pts.back());
+        }
         if (!direction_forward) std::reverse(sampled.begin(), sampled.end());
         for (size_t i_pt = 0; i_pt < sampled.size(); ++i_pt) {
             const int idx = full_tree.nearest(sampled[i_pt]);

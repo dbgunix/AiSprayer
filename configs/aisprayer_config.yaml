@@ -77,7 +77,7 @@ spraying:
   spray_dist_mm: 150          # 默认喷涂靶距 / TCP standoff 距离 (mm)
   spray_width_mm: 60.0         # 喷涂幅宽 (mm)
   overlap_rate: 0.2             # 喷幅重叠率 (0~1.0)
-  point_spacing_mm: 20.0        # 沿行点间距 (mm)
+  point_spacing_mm: 100.0        # 沿行点间距 (mm)
   velocity: 150.0               # 喷涂移动速度 (mm/s)
   slerp_step_mm: 2.0            # 仿真与运动学验证插值步长 (mm)
 
@@ -125,6 +125,11 @@ spraying:
   singularity_speed_scaling: true
   singularity_ref_deg: 25.0    # |J5| ≥ 此角度(deg) 视为远离奇异, 不减速; 越接近 0 减速越多
   singularity_min_scale: 0.2   # 减速下限比例 (近奇异段最多降到名义速度的 20%)
+
+  # 喷枪开/关物理响应延迟补偿 (ms): 下发对应队列 DO 后驻留此时长再继续下发本段 MoveL,
+  # 用于覆盖喷枪建压开喷 / 完全断料的机械延迟。0 (默认) = 不驻留, 保持原有 CP 连续行为。
+  spray_on_delay_ms: 0
+  spray_off_delay_ms: 0
 
 # 4. 工位跟随 (Follow) —— 特征前端 + 配准 + 判据 + 臂侧镜像
 # 这一份 `follow:` 块有两个读者，跑的是同一套数学：

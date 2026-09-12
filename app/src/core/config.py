@@ -320,6 +320,30 @@ CONFIG_REGISTRY: List[Dict[str, Any]] = [
         "default": False,
         "description": "Master switch for wrist-singularity (|J5|->0) auto slowdown. True: optimizer/verifier scale dt by manipulability AND the executor really lowers TCP speed near singularity using the per-waypoint profile; False: speed unchanged (both model & hardware).",
     },
+    {
+        "key": "spraying.spray_on_delay_ms",
+        "category": "spraying",
+        "label": "Spray Gun ON Delay (ms)",
+        "type": "number",
+        "yaml_path": "spraying.spray_on_delay_ms",
+        "default": 0,
+        "min": 0,
+        "max": 5000,
+        "step": 10,
+        "description": "Dwell (ms) after issuing the spray-ON DO before continuing motion, to cover the gun's physical open / pressure-build lag. 0 = no delay (default).",
+    },
+    {
+        "key": "spraying.spray_off_delay_ms",
+        "category": "spraying",
+        "label": "Spray Gun OFF Delay (ms)",
+        "type": "number",
+        "yaml_path": "spraying.spray_off_delay_ms",
+        "default": 0,
+        "min": 0,
+        "max": 5000,
+        "step": 10,
+        "description": "Dwell (ms) after issuing the spray-OFF DO before continuing motion, to cover the gun's physical close / cut-off lag. 0 = no delay (default).",
+    },
 
     # ─── 4. 视觉识别与交互式分割 (Vision & Interactive SAM) ─────────────────
     {
@@ -892,6 +916,16 @@ class SprayerConfig:
         False: 模型与真机均不改变速度 (零回归, 默认关, 待真机 dry-run 验证后再开)。
         """
         return bool(self.get_cascading("spraying.singularity_speed_scaling", "spraying.singularity_speed_scaling", False))
+
+    @property
+    def spray_on_delay_ms(self) -> int:
+        """喷枪开启响应延迟 (ms): 下发开喷 DO 后驻留此时长再继续下发本段 MoveL; 0 = 不延迟 (默认)。"""
+        return int(self.get_cascading("spraying.spray_on_delay_ms", "spraying.spray_on_delay_ms", 0) or 0)
+
+    @property
+    def spray_off_delay_ms(self) -> int:
+        """喷枪关闭响应延迟 (ms): 下发关喷 DO 后驻留此时长再继续下发本段 MoveL; 0 = 不延迟 (默认)。"""
+        return int(self.get_cascading("spraying.spray_off_delay_ms", "spraying.spray_off_delay_ms", 0) or 0)
 
     @property
     def grid_tol_x_deg(self) -> Tuple[float, float, float]:
