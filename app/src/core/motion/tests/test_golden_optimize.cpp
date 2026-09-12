@@ -27,7 +27,6 @@ int main() {
   const std::string root = REPO_ROOT;
   const std::string urdf = root + "/app/urdf/cr5_robot_with_my_tools.urdf";
   const std::string auto_yaml = root + "/data/template_group/2026-09-03_225937/scan.auto.path.yaml";
-  const std::string poi_yaml = root + "/data/template_group/2026-09-03_225937/scan.auto.poi.path.yaml";
 
   RobotModel model;
   std::string err;
@@ -35,14 +34,13 @@ int main() {
     std::cerr << err << "\n";
     return 1;
   }
-  PathDocument raw, poi;
-  if (!LoadPathYaml(auto_yaml, raw, &err) || !LoadPathYaml(poi_yaml, poi, &err)) {
+  PathDocument raw;
+  if (!LoadPathYaml(auto_yaml, raw, &err)) {
     std::cerr << err << "\n";
     return 1;
   }
-  CHECK(raw.paths.size() == 1 && poi.paths.size() == 1);
+  CHECK(raw.paths.size() == 1);
   CHECK(raw.paths[0].points.size() == 81);
-  CHECK(poi.paths[0].points.size() == 81);
 
   Cr5Kinematics kin(model.limits);
   OptimizeOptions oopt;
@@ -71,23 +69,26 @@ int main() {
   CHECK(got.path.points.size() == 81);
   CHECK(got.verify.status == "PASS" || got.verify.issues.empty());
 
-  double max_geo = 0.0, max_pos_mm = 0.0;
-  int mismatch = 0;
+  // This used to compare byte-for-byte against a saved POI path.  Nominal
+  // poses are now explicit candidates, so the old path is intentionally no
+  // longer the golden answer.  Keep the meaningful invariants instead.
+  double max_pos_mm = 0.0, max_envelope_overflow = 0.0;
   for (size_t i = 0; i < got.path.points.size(); ++i) {
     const auto& a = got.path.points[i].tcp_pose;
-    const auto& b = poi.paths[0].points[i].tcp_pose;
+    const auto& b = raw.paths[0].points[i].tcp_pose;
     const double dpos = (a.translation() - b.translation()).norm() * kMmPerM;
-    const double geo = GeodesicDeg(a.linear(), b.linear());
     max_pos_mm = std::max(max_pos_mm, dpos);
-    max_geo = std::max(max_geo, geo);
-    if (dpos > 0.05 || geo > 0.05) ++mismatch;
+    Eigen::Vector3d rel = CtrlRpyDegFromRot(anchor.R->transpose() * a.linear());
+    for (int axis = 0; axis < 3; ++axis) {
+      max_envelope_overflow =
+          std::max(max_envelope_overflow, std::abs(Wrap180(rel[axis])) - anchor.tol_deg[axis]);
+    }
   }
-  std::cout << "optimize vs poi: max_pos_mm=" << max_pos_mm << " max_geo_deg=" << max_geo
-            << " mismatch=" << mismatch << "/" << got.path.points.size()
+  std::cout << "optimize invariants: max_pos_mm=" << max_pos_mm
+            << " max_envelope_overflow_deg=" << max_envelope_overflow
             << " elapsed_ms=" << got.elapsed_ms << "\n";
   CHECK(max_pos_mm < 0.05);
-  CHECK(max_geo < 0.05);
-  CHECK(mismatch == 0);
+  CHECK(max_envelope_overflow < 1e-6);
 
   if (g_fail) {
     std::cerr << g_fail << " golden optimize checks failed\n";

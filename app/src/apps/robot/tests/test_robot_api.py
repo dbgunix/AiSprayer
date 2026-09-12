@@ -116,6 +116,36 @@ class TestRobotAPI(unittest.TestCase):
         mock_service.clear_error.return_value = (True, "OK")
         self.assertEqual(self.client.post("/api/robot/clear_error").status_code, 200)
 
+    @patch("apps.robot.api.robot_service")
+    def test_state_and_joints_endpoints(self, mock_service):
+        # Disconnected state
+        mock_service.is_connected.return_value = False
+        resp = self.client.get("/api/robot/state")
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["connected"])
+
+        resp = self.client.get("/api/robot/joints")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("not connected", resp.json()["detail"].lower())
+
+        # Connected state
+        mock_service.is_connected.return_value = True
+        mock_service.is_moving.return_value = False
+        mock_service.get_running_state.return_value = 0
+        mock_service.get_current_joint.return_value = ([10.0, 20.0, -30.0, 40.0, -50.0, 60.0], "")
+        mock_service.get_current_pose.return_value = ([100.0, 200.0, 300.0, 0.0, 90.0, 0.0], "")
+
+        resp = self.client.get("/api/robot/state")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["connected"])
+        self.assertEqual(data["joints"], [10.0, 20.0, -30.0, 40.0, -50.0, 60.0])
+        self.assertEqual(data["pose"], [100.0, 200.0, 300.0, 0.0, 90.0, 0.0])
+
+        resp = self.client.get("/api/robot/joints")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["joints"], [10.0, 20.0, -30.0, 40.0, -50.0, 60.0])
+
 
 if __name__ == "__main__":
     unittest.main()

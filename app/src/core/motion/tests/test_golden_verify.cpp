@@ -84,7 +84,7 @@ int main() {
   CHECK(report.summary.total_issues == 0);
   CHECK(!report.path_reports.empty());
 
-  const double expect_peak[6] = {30.3, 27.8, 33.8, 145.7, 44.4, 122.5};
+  const double expect_peak[6] = {28.2, 27.8, 27.2, 145.7, 42.3, 122.5};
   for (int i = 0; i < 6; ++i) {
     const double got = report.path_reports[0].peak_joint_speeds_deg_s[i];
     if (std::abs(got - expect_peak[i]) > 0.15) {

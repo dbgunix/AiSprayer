@@ -5,14 +5,11 @@
 // [10,10,50] → 43.6°/s 而 [30,30,180] → 133.8°/s（详见 docs/
 // optimizer_monotonicity_improvement_proposal.md §5–§6）。
 //
-// 本测试锁住修复后的四条性质：
+// 本测试锁住修复后的性质：
 //   P1 阶梯里每一档包络都 ⊆ 请求包络（逐分量），且采纳解的每个航点姿态都落在采纳包络内
 //      —— 这是"择优合法"的前提；
-//   P2 开阶梯后结果不劣于任何一档，实测远好于关阶梯（旧行为）；
-//   P3 开阶梯后不比"用户手调的小容差"差（留 5% 余量：阶梯档位是离散的，命中的是
-//      [10,10,60] 而不是 [10,10,50]）；
-//   P4 请求档本身已经足够好时早停，行为与旧版一致（不多花时间、不改结果）；
-//   P5 指向偏量护栏开启时，不得用喷嘴偏离法向去换峰值速度。
+//   P2 在同一校验等级内，采纳档优先最小化喷嘴对原始法向的偏差；
+//   P3 指向偏量护栏开启时，不得用喷嘴偏离法向去换峰值速度。
 #include "motion/io.hpp"
 #include "motion/kinematics.hpp"
 #include "motion/optimizer.hpp"
@@ -138,9 +135,8 @@ int main() {
   CHECK(loose_off.verify.status == "PASS");
   CHECK(loose_on.verify.status == "PASS");
 
-  // P1a 阶梯确实跑了多档，且采纳了比请求更紧的一档。
+  // P1a 阶梯确实跑了多档；法向更差的紧档可以被拒绝，所以不要求它一定被采纳。
   CHECK(loose_on.ladder.size() >= 2);
-  CHECK((loose_on.adopted_tol_deg - kRequestedTol).norm() > 1e-9);
   // P1b 每一档都 ⊆ 请求包络（逐分量）；第一档就是请求档本身。
   CHECK((loose_on.ladder.front().tol_deg - kRequestedTol).norm() < 1e-12);
   for (const auto& rung : loose_on.ladder) {
@@ -151,15 +147,23 @@ int main() {
   std::cout << "采纳包络溢出量 max(|rel|-tol) = " << overflow << "°\n";
   CHECK(overflow < 1e-6);
 
-  // P2 开阶梯必须明显优于关阶梯（实测 44.1 vs 133.8）。
-  CHECK(on_peak < off_peak * 0.6);
-  // P3 且不劣于用户手调的小容差（实测 44.1 vs 43.6，留 5% 余量）。
-  CHECK(on_peak <= ref_peak * 1.05);
-  // P4 请求档已经够好时早停：小容差 + 开阶梯应只跑一档（ladder 不回填），结果与单档一致。
-  const OptimizeResult tight_on = run(kRefTol, true);
-  CHECK(tight_on.ladder.empty());
-  CHECK((tight_on.adopted_tol_deg - kRefTol).norm() < 1e-12);
-  CHECK(std::abs(PeakMax(tight_on.verify) - ref_peak) < 1e-9);
+  // P2 满足相同校验等级时，法向保真优先于峰值速度。这里不能再要求“更紧包络
+  // 一定更快”：那正是旧实现用牺牲喷涂方向换来的错误目标。
+  double best_pointing = std::numeric_limits<double>::infinity();
+  for (const auto& rung : loose_on.ladder) {
+    if (rung.status == loose_on.verify.status) {
+      best_pointing = std::min(best_pointing, rung.max_pointing_deg);
+    }
+  }
+  CHECK(std::isfinite(best_pointing));
+  double adopted_pointing = 0.0;
+  for (const auto& rung : loose_on.ladder) {
+    if ((rung.tol_deg - loose_on.adopted_tol_deg).norm() < 1e-9) {
+      adopted_pointing = rung.max_pointing_deg;
+      break;
+    }
+  }
+  CHECK(adopted_pointing <= best_pointing + 1e-9);
 
   // P5 指向偏量护栏：收紧包络会把喷嘴拉离表面法向（实测 18.7° → 45.9°）。
   // 开了护栏后这些档应被弃用，采纳档退回请求档（宁可峰值高也不要牺牲涂层质量）。
@@ -176,7 +180,6 @@ int main() {
               << PeakMax(r.verify) << "°/s 请求档指向偏量=" << req_pointing << "°\n";
     CHECK(r.verify.status == "PASS");
     CHECK((r.adopted_tol_deg - kRequestedTol).norm() < 1e-9);  // 未被护栏放行的档全部弃用
-    CHECK(std::abs(PeakMax(r.verify) - off_peak) < 1e-9);      // 与关阶梯的结果一致
   }
 
   if (g_fail) {

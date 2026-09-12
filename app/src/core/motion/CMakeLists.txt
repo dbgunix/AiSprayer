@@ -75,3 +75,9 @@ add_executable(test_tol_ladder tests/test_tol_ladder.cpp)
 target_link_libraries(test_tol_ladder PRIVATE motion_io)
 target_compile_definitions(test_tol_ladder PRIVATE REPO_ROOT="${REPO_ROOT}")
 add_test(NAME test_tol_ladder COMMAND test_tol_ladder)
+
+# 姿态契约：原姿态优先、零包络严格，以及无解点只能在包络内修复。
+add_executable(test_orientation_contract tests/test_orientation_contract.cpp)
+target_link_libraries(test_orientation_contract PRIVATE motion_io)
+target_compile_definitions(test_orientation_contract PRIVATE REPO_ROOT="${REPO_ROOT}")
+add_test(NAME test_orientation_contract COMMAND test_orientation_contract)

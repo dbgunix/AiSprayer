@@ -152,6 +152,9 @@ std::vector<DenseStep> Interpolator::Interpolate(const std::vector<Waypoint>& wa
 
 SegmentChecker::SegmentChecker(const Cr5Kinematics& kin) : kin_(kin) {}
 
+SegmentChecker::SegmentChecker(const Cr5Kinematics& kin, const ToolOffset& tool)
+    : kin_(kin), tool_(&tool) {}
+
 int SegmentChecker::WalkRaw(const double* p_start, const double* p_end, const double* quat1,
                             const double* quat2, const double* q_start, const double* alphas,
                             int n_alphas, const double* q_branch_end, int check_end_branch,
@@ -184,6 +187,15 @@ int SegmentChecker::WalkRaw(const double* p_start, const double* p_end, const do
     T_ctrl[8] = R[6];
     T_ctrl[9] = R[7];
     T_ctrl[10] = R[8];
+
+    // The optimizer supplies TCP MoveL poses, matching the execution and
+    // verifier contract.  Convert each interpolated TCP pose to its flange
+    // pose before IK.  The legacy C ABI has no ToolOffset and continues to
+    // supply flange poses, so it leaves tool_ null.
+    if (tool_) {
+      const Transform T_flange = TransformFromRowMajor(T_ctrl) * tool_->T_tcp_inv;
+      TransformToRowMajor(T_flange, T_ctrl);
+    }
 
     double T_urdf[16];
     CtrlToUrdfRow(T_ctrl, T_urdf);

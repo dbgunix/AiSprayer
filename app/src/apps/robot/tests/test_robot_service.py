@@ -202,8 +202,8 @@ class TestRobotService(unittest.TestCase):
                     self.do_calls.append((index, status, immediate))
                     return True
 
-                def move_l_queue(self, poses, velocity=100.0, acc=80.0, dec=80.0, tool_num=None, wait=True, cp_ratio=50) -> int:
-                    self.queue_calls.append((poses, wait))
+                def move_l_queue(self, poses, velocity=100.0, acc=80.0, dec=80.0, tool_num=None, wait=True, cp_ratio=50, speeds=None) -> int:
+                    self.queue_calls.append((poses, wait, speeds))
                     return 0
 
             driver = DummyDriver()
@@ -215,6 +215,111 @@ class TestRobotService(unittest.TestCase):
         # First call: queue DO 1; Second call after segments complete: immediate DO 0
         self.assertEqual(driver.do_calls[0], (1, 1, False))
         self.assertEqual(driver.do_calls[-1], (1, 0, True))
+        # 未提供逐航点 speeds 时透传 None (保持原有匀速行为)
+        self.assertIsNone(driver.queue_calls[0][2])
+
+    def test_base_driver_move_l_segments_threads_per_waypoint_speeds(self):
+        """奇异降速: 段内 speeds 与 poses 等长时逐层透传到 move_l_queue; 不等长不应报错但驱动层会回退。"""
+        with patch.object(BaseRobotDriver, "__abstractmethods__", set()):
+            class DummyDriver(BaseRobotDriver):
+                def __init__(self):
+                    super().__init__()
+                    self.do_calls = []
+                    self.queue_calls = []
+
+                def set_do(self, index: int, status: int, immediate: bool = False) -> bool:
+                    self.do_calls.append((index, status, immediate))
+                    return True
+
+                def move_l_queue(self, poses, velocity=100.0, acc=80.0, dec=80.0, tool_num=None, wait=True, cp_ratio=50, speeds=None) -> int:
+                    self.queue_calls.append((poses, wait, speeds))
+                    return 0
+
+            driver = DummyDriver()
+        segments = [
+            {"spraying": True,
+             "poses": [RobotPose(x=10, y=20, z=30), RobotPose(x=11, y=20, z=30)],
+             "speeds": [150.0, 30.0]},
+        ]
+        ret = driver.move_l_segments(segments, velocity=150.0, spray_do_index=1)
+        self.assertEqual(ret, 0)
+        # 逐航点速度按序透传至驱动层
+        self.assertEqual(driver.queue_calls[0][2], [150.0, 30.0])
+
+    def test_home_and_fold_position_cascading_and_driver_dispatch(self):
+        from core.config import SprayerConfig
+        from services.setting_service import SettingService
+        from apps.system.api import validate_setting_entry
+        from fastapi import HTTPException
+
+        config = SprayerConfig()
+        setting_srv = SettingService()
+
+        # 1. Baseline from YAML or defaults
+        default_home = config.home_position
+        default_fold = config.fold_position
+        self.assertEqual(len(default_home), 6)
+        self.assertEqual(len(default_fold), 6)
+        self.assertTrue(all(isinstance(x, float) for x in default_home))
+        self.assertTrue(all(isinstance(x, float) for x in default_fold))
+
+        # 2. Database override takes precedence
+        custom_home = [5.0, -10.0, -85.0, 0.0, -95.0, 15.0]
+        custom_fold = [0.0, 10.0, -150.0, 5.0, -165.0, 0.0]
+        try:
+            setting_srv.set_value("robot.home_position", custom_home)
+            setting_srv.set_value("robot.fold_position", custom_fold)
+            config.reload_db_overrides()
+            self.service.reload_config()
+
+            self.assertEqual(config.home_position, custom_home)
+            self.assertEqual(config.fold_position, custom_fold)
+            self.assertEqual(self.service.home_position, custom_home)
+            self.assertEqual(self.service.fold_position, custom_fold)
+
+            # 3. Verify driver dispatch with custom positions
+            mock_driver = MagicMock(spec=BaseRobotDriver)
+            mock_driver.is_connected = True
+            mock_driver.go_home.return_value = 0
+            mock_driver.set_do.return_value = True
+            mock_driver.move_joint.return_value = 0
+            mock_driver.get_current_joint.return_value = [0.0] * 6
+
+            self.service._driver = mock_driver
+            self.service._is_connected = True
+
+            # go_home passes target_joints=custom_home
+            ok, msg = self.service.go_home(speed=15.0, acc=15.0)
+            self.assertTrue(ok)
+            mock_driver.go_home.assert_called_with(wait=True, velocity=15.0, acc=15.0, target_joints=custom_home)
+
+            # go_fold passes custom_fold to move_joint
+            ok, msg = self.service.go_fold(speed=10.0, acc=10.0)
+            self.assertTrue(ok)
+            mock_driver.move_joint.assert_called_with(custom_fold, velocity=unittest.mock.ANY, acc=10.0)
+        finally:
+            # 4. Clean up DB overrides and verify rollback to YAML baseline
+            setting_srv.delete_value("robot.home_position")
+            setting_srv.delete_value("robot.fold_position")
+            config.reload_db_overrides()
+            self.service.reload_config()
+
+            self.assertEqual(config.home_position, default_home)
+            self.assertEqual(config.fold_position, default_fold)
+
+        # 5. Test vector6 validation in system API
+        valid_vec = validate_setting_entry("robot.home_position", [1, 2, 3, 4, 5, 6])
+        self.assertEqual(valid_vec, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+
+        with self.assertRaises(HTTPException) as cm:
+            validate_setting_entry("robot.home_position", [1, 2, 3, 4, 5])
+        self.assertEqual(cm.exception.status_code, 400)
+        self.assertIn("6-element list", cm.exception.detail)
+
+        with self.assertRaises(HTTPException) as cm:
+            validate_setting_entry("robot.home_position", [1, 2, "abc", 4, 5, 6])
+        self.assertEqual(cm.exception.status_code, 400)
+        self.assertIn("non-numeric", cm.exception.detail)
 
 
 if __name__ == "__main__":

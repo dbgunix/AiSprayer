@@ -1,0 +1,1459 @@
+{
+  "date": "2026-09-12",
+  "source": "Current working tree, including pre-existing uncommitted changes",
+  "nominal_speed_mm_s": 150,
+  "verification_step_mm": 2,
+  "singularity_speed_scaling": true,
+  "serialized_angle_audit_tolerance_deg": 0.02,
+  "max_normal_deviation_reference": "original TCP tool Z; aligned to negative surface normal within 0.012 deg",
+  "sha256": {
+    "configs/aisprayer_config.yaml": "f7c6b4e9abcb3961d4df664e9ed9d7a05d3f545b2b8c11566d60c0c0836374dd",
+    "app/urdf/cr5_robot_with_my_tools.urdf": "68d4e93db1fb7a92b29e169ca341434f01474ce79cebcd62f5764e775f3d5624",
+    "app/src/core/motion/src/optimizer.cpp": "20f174c0293a30ef161fccf56ea2dcf9af450fdf1ba97225839f51167f78edb1",
+    "app/src/core/motion/src/segment.cpp": "e330a44f89268900f74473b157ce1a3c80a160336d4af50a23950dd63f684e4e",
+    "app/src/core/motion/src/verifier.cpp": "958c3eb9056db5b93d01eac30902bbb8320bc55c7bc2be3b8d59c7360cb13276",
+    "app/src/core/motion/include/motion/conventions.hpp": "05e8fb2f7ec8694dea2cbd0be95728c17e6dca485db7c1d22959411c8ad7c9b5",
+    "data/template_group/2026-09-12_104336/scan.auto.path.yaml": "40437fb6d0c907a9c838fbc738557f669aa3589f65deab9aef7e186264b9dbf5",
+    "data/template_group/2026-09-12_092632/scan.auto.path.yaml": "66c4cc5a97b5927c5db83db49f99306b1c9425fc48b35eb99ac5e57fefb6e4da"
+  },
+  "results": [
+    {
+      "group": "2026-09-12_092632",
+      "case": "current",
+      "exit_code": 0,
+      "elapsed_s": 1.1762236949998623,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_092632/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_092632_current.yaml"
+      ],
+      "status": "PASS",
+      "summary": {
+        "status": "PASS",
+        "total_paths": 1,
+        "total_waypoints": 14,
+        "total_steps": 598,
+        "total_issues": 0,
+        "singularity_count": 0,
+        "overspeed_count": 0,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 2.687799101139624,
+      "mean_normal_deg": 1.5045852587948538,
+      "max_rel_rpy_deg": [
+        1.0079144944993328,
+        2.497967010397703,
+        10.00340570456761
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 80.9,
+      "min_waypoint_speed": 62.8,
+      "poi_config": {
+        "mode": "per_waypoint_nominal_envelope",
+        "anchor_source": "raw",
+        "ref_rpy_deg": null,
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          2.5,
+          2.5,
+          45.0
+        ],
+        "tolerance_ladder_applied": true,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [],
+      "max_envelope_rel_rpy_deg": [
+        1.0079144944993328,
+        2.497967010397703,
+        10.00340570456761
+      ]
+    },
+    {
+      "group": "2026-09-12_092632",
+      "case": "global_current",
+      "exit_code": 0,
+      "elapsed_s": 0.8119934089991148,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_092632/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_092632_global_current.yaml",
+        "--anchor-source",
+        "config"
+      ],
+      "status": "PASS",
+      "summary": {
+        "status": "PASS",
+        "total_paths": 1,
+        "total_waypoints": 14,
+        "total_steps": 598,
+        "total_issues": 0,
+        "singularity_count": 0,
+        "overspeed_count": 0,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 31.523115199950613,
+      "mean_normal_deg": 21.24174651087054,
+      "max_rel_rpy_deg": [
+        28.26551067072766,
+        18.55129702887863,
+        29.933196221762323
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 44.4,
+      "min_waypoint_speed": 100.3,
+      "poi_config": {
+        "mode": "absolute_anchor_tolerance",
+        "anchor_source": "config",
+        "ref_rpy_deg": [
+          90.0,
+          0.0,
+          90.0
+        ],
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          3.3,
+          3.3,
+          60.0
+        ],
+        "tolerance_ladder_applied": true,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [],
+      "max_envelope_rel_rpy_deg": [
+        3.3354709418745117,
+        3.335030434529951,
+        60.00429159717331
+      ]
+    },
+    {
+      "group": "2026-09-12_092632",
+      "case": "global_no_ladder",
+      "exit_code": 0,
+      "elapsed_s": 0.355825984999683,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_092632/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_092632_global_no_ladder.yaml",
+        "--anchor-source",
+        "config",
+        "--no-tol-ladder"
+      ],
+      "status": "PASS",
+      "summary": {
+        "status": "PASS",
+        "total_paths": 1,
+        "total_waypoints": 14,
+        "total_steps": 598,
+        "total_issues": 0,
+        "singularity_count": 0,
+        "overspeed_count": 0,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 22.08899109884761,
+      "mean_normal_deg": 11.880149513004143,
+      "max_rel_rpy_deg": [
+        16.902347970801372,
+        14.433932886526623,
+        29.999303303896067
+      ],
+      "max_envelope_rel_rpy_deg": [
+        10.008859169491103,
+        10.004357325458454,
+        119.29309801108283
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 68.3,
+      "min_waypoint_speed": 57.0,
+      "poi_config": {
+        "mode": "absolute_anchor_tolerance",
+        "anchor_source": "config",
+        "ref_rpy_deg": [
+          90.0,
+          0.0,
+          90.0
+        ],
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "tolerance_ladder_applied": false,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": []
+    },
+    {
+      "group": "2026-09-12_092632",
+      "case": "original_only",
+      "exit_code": 0,
+      "elapsed_s": 0.1260807910002768,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_092632/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_092632_original_only.yaml",
+        "--grid-x",
+        "0,0,1",
+        "--grid-y",
+        "0,0,1",
+        "--grid-z",
+        "0,0,1",
+        "--no-tol-ladder"
+      ],
+      "status": "PASS",
+      "summary": {
+        "status": "PASS",
+        "total_paths": 1,
+        "total_waypoints": 14,
+        "total_steps": 598,
+        "total_issues": 0,
+        "singularity_count": 0,
+        "overspeed_count": 0,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 1.9090959104164224e-06,
+      "mean_normal_deg": 5.469102482246778e-07,
+      "max_rel_rpy_deg": [
+        1.5902773407317584e-15,
+        0.0,
+        3.1805546814635168e-15
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 76.4,
+      "min_waypoint_speed": 54.2,
+      "poi_config": {
+        "mode": "per_waypoint_nominal_envelope",
+        "anchor_source": "raw",
+        "ref_rpy_deg": null,
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "tolerance_ladder_applied": false,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [],
+      "max_envelope_rel_rpy_deg": [
+        1.5902773407317584e-15,
+        0.0,
+        3.1805546814635168e-15
+      ]
+    },
+    {
+      "group": "2026-09-12_092632",
+      "case": "original_only_roundtrip",
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "verify",
+        "--input",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_092632_original_only.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_092632_original_only_roundtrip.yaml",
+        "--seed",
+        "-142.64930225372106,48.46077031216503,85.1186100446351,52.11051146714837,151.65046921522628,-80.11668849314302"
+      ],
+      "exit_code": 0,
+      "status": "PASS",
+      "summary": {
+        "status": "PASS",
+        "total_paths": 1,
+        "total_waypoints": 14,
+        "total_steps": 598,
+        "total_issues": 0,
+        "singularity_count": 0,
+        "overspeed_count": 0,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 1.9090959104164224e-06,
+      "mean_normal_deg": 5.469102482246778e-07,
+      "max_rel_rpy_deg": [
+        1.5902773407317584e-15,
+        0.0,
+        3.1805546814635168e-15
+      ],
+      "max_envelope_rel_rpy_deg": [
+        1.5902773407317584e-15,
+        0.0,
+        3.1805546814635168e-15
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 76.4,
+      "min_waypoint_speed": 54.2,
+      "poi_config": null,
+      "issue_types": []
+    },
+    {
+      "group": "2026-09-12_092632",
+      "case": "raw_verify",
+      "exit_code": 0,
+      "elapsed_s": 0.10028524700101116,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "verify",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_092632/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_092632_raw_verify.yaml"
+      ],
+      "status": "FAILED",
+      "summary": {
+        "status": "FAILED",
+        "total_paths": 1,
+        "total_waypoints": 14,
+        "total_steps": 598,
+        "total_issues": 5,
+        "singularity_count": 0,
+        "overspeed_count": 3,
+        "unreachable_count": 2
+      },
+      "max_normal_deg": 1.9090959104164224e-06,
+      "mean_normal_deg": 5.469102482246778e-07,
+      "max_rel_rpy_deg": [
+        1.5902773407317584e-15,
+        0.0,
+        3.1805546814635168e-15
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 27321.5,
+      "min_waypoint_speed": 54.2,
+      "poi_config": null,
+      "issue_types": [
+        "JOINT_OVERSPEED",
+        "KINEMATIC_DISCONTINUITY",
+        "JOINT_OVERSPEED",
+        "KINEMATIC_DISCONTINUITY",
+        "JOINT_OVERSPEED"
+      ],
+      "max_envelope_rel_rpy_deg": [
+        1.5902773407317584e-15,
+        0.0,
+        3.1805546814635168e-15
+      ]
+    },
+    {
+      "group": "2026-09-12_092632",
+      "case": "spin180",
+      "exit_code": 0,
+      "elapsed_s": 2.0307011589993635,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_092632/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_092632_spin180.yaml",
+        "--grid-x",
+        "0,0,1",
+        "--grid-y",
+        "0,0,1",
+        "--grid-z",
+        "-180,180,5",
+        "--max-candidates-per-branch",
+        "73",
+        "--beam-width",
+        "64",
+        "--no-tol-ladder"
+      ],
+      "status": "PASS",
+      "summary": {
+        "status": "PASS",
+        "total_paths": 1,
+        "total_waypoints": 14,
+        "total_steps": 598,
+        "total_issues": 0,
+        "singularity_count": 0,
+        "overspeed_count": 0,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 0.008044726258779344,
+      "mean_normal_deg": 0.002967426763642566,
+      "max_rel_rpy_deg": [
+        0.007806805794208843,
+        0.002978333398623566,
+        110.00053944610939
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 84.8,
+      "min_waypoint_speed": 30.0,
+      "poi_config": {
+        "mode": "per_waypoint_nominal_envelope",
+        "anchor_source": "raw",
+        "ref_rpy_deg": null,
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "tolerance_ladder_applied": false,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [],
+      "max_envelope_rel_rpy_deg": [
+        0.007806805794208843,
+        0.002978333398623566,
+        110.00053944610939
+      ]
+    },
+    {
+      "group": "2026-09-12_092632",
+      "case": "spin30",
+      "exit_code": 0,
+      "elapsed_s": 0.2694397459999891,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_092632/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_092632_spin30.yaml",
+        "--grid-x",
+        "0,0,1",
+        "--grid-y",
+        "0,0,1",
+        "--no-tol-ladder"
+      ],
+      "status": "PASS",
+      "summary": {
+        "status": "PASS",
+        "total_paths": 1,
+        "total_waypoints": 14,
+        "total_steps": 598,
+        "total_issues": 0,
+        "singularity_count": 0,
+        "overspeed_count": 0,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 0.007805609633035555,
+      "mean_normal_deg": 0.0032959415141828713,
+      "max_rel_rpy_deg": [
+        0.0070535160235598166,
+        0.004857682481102149,
+        29.997354999682063
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 69.7,
+      "min_waypoint_speed": 57.6,
+      "poi_config": {
+        "mode": "per_waypoint_nominal_envelope",
+        "anchor_source": "raw",
+        "ref_rpy_deg": null,
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "tolerance_ladder_applied": false,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [],
+      "max_envelope_rel_rpy_deg": [
+        0.0070535160235598166,
+        0.004857682481102149,
+        29.997354999682063
+      ]
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "centered_grid",
+      "exit_code": 0,
+      "elapsed_s": 2.6692990840001585,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_104336/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_centered_grid.yaml",
+        "--grid-x",
+        "-10,10,2",
+        "--grid-y",
+        "-10,10,2"
+      ],
+      "status": "WARNING",
+      "summary": {
+        "status": "WARNING",
+        "total_paths": 1,
+        "total_waypoints": 53,
+        "total_steps": 652,
+        "total_issues": 4,
+        "singularity_count": 0,
+        "overspeed_count": 4,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 6.323859166087569,
+      "mean_normal_deg": 1.3694161407331413,
+      "max_rel_rpy_deg": [
+        5.991146621193825,
+        6.0002033900250185,
+        30.005011703609593
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 243.0,
+      "min_waypoint_speed": 30.0,
+      "poi_config": {
+        "mode": "per_waypoint_nominal_envelope",
+        "anchor_source": "raw",
+        "ref_rpy_deg": null,
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "tolerance_ladder_applied": false,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED"
+      ],
+      "max_envelope_rel_rpy_deg": [
+        5.991146621193825,
+        6.0002033900250185,
+        30.005011703609593
+      ]
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "current",
+      "exit_code": 0,
+      "elapsed_s": 2.9080703370000265,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_104336/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_current.yaml"
+      ],
+      "status": "PASS",
+      "summary": {
+        "status": "PASS",
+        "total_paths": 1,
+        "total_waypoints": 53,
+        "total_steps": 652,
+        "total_issues": 0,
+        "singularity_count": 0,
+        "overspeed_count": 0,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 7.07309543251571,
+      "mean_normal_deg": 2.087915091545228,
+      "max_rel_rpy_deg": [
+        5.002951795334319,
+        7.002192166126427,
+        24.9964109415781
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 152.7,
+      "min_waypoint_speed": 30.0,
+      "poi_config": {
+        "mode": "per_waypoint_nominal_envelope",
+        "anchor_source": "raw",
+        "ref_rpy_deg": null,
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "tolerance_ladder_applied": false,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [],
+      "max_envelope_rel_rpy_deg": [
+        5.002951795334319,
+        7.002192166126427,
+        24.9964109415781
+      ]
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "current_roundtrip",
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "verify",
+        "--input",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_current.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_current_roundtrip.yaml",
+        "--seed",
+        "-0.590146528984748,-26.745669876706827,-93.41503891812943,-66.6063436839582,-140.3746598070517,-65.34010695671908"
+      ],
+      "exit_code": 0,
+      "status": "PASS",
+      "summary": {
+        "status": "PASS",
+        "total_paths": 1,
+        "total_waypoints": 53,
+        "total_steps": 652,
+        "total_issues": 0,
+        "singularity_count": 0,
+        "overspeed_count": 0,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 7.07309543251571,
+      "mean_normal_deg": 2.087915091545228,
+      "max_rel_rpy_deg": [
+        5.002951795334319,
+        7.002192166126427,
+        24.9964109415781
+      ],
+      "max_envelope_rel_rpy_deg": [
+        5.002951795334319,
+        7.002192166126427,
+        24.9964109415781
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 152.8,
+      "min_waypoint_speed": 30.0,
+      "poi_config": null,
+      "issue_types": []
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "global_current",
+      "exit_code": 0,
+      "elapsed_s": 3.082871373000671,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_104336/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_global_current.yaml",
+        "--anchor-source",
+        "config"
+      ],
+      "status": "PASS",
+      "summary": {
+        "status": "PASS",
+        "total_paths": 1,
+        "total_waypoints": 53,
+        "total_steps": 652,
+        "total_issues": 0,
+        "singularity_count": 0,
+        "overspeed_count": 0,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 47.74942929351798,
+      "mean_normal_deg": 24.05341155896659,
+      "max_rel_rpy_deg": [
+        39.003517074995685,
+        32.49663684939337,
+        49.55306694688409
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 35.1,
+      "min_waypoint_speed": 78.1,
+      "poi_config": {
+        "mode": "absolute_anchor_tolerance",
+        "anchor_source": "config",
+        "ref_rpy_deg": [
+          90.0,
+          0.0,
+          90.0
+        ],
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          2.5,
+          2.5,
+          45.0
+        ],
+        "tolerance_ladder_applied": true,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [],
+      "max_envelope_rel_rpy_deg": [
+        2.5047452066157496,
+        2.4974748434074514,
+        45.00440533957555
+      ]
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "global_no_ladder",
+      "exit_code": 0,
+      "elapsed_s": 0.9260790270000143,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_104336/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_global_no_ladder.yaml",
+        "--anchor-source",
+        "config",
+        "--no-tol-ladder"
+      ],
+      "status": "WARNING",
+      "summary": {
+        "status": "WARNING",
+        "total_paths": 1,
+        "total_waypoints": 53,
+        "total_steps": 652,
+        "total_issues": 25,
+        "singularity_count": 0,
+        "overspeed_count": 25,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 37.62535680827123,
+      "mean_normal_deg": 14.502223172806614,
+      "max_rel_rpy_deg": [
+        34.040370738930285,
+        17.584673235404154,
+        30.002676509109925
+      ],
+      "max_envelope_rel_rpy_deg": [
+        10.007922485653667,
+        10.002953932865376,
+        124.4658086237855
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 420.6,
+      "min_waypoint_speed": 30.0,
+      "poi_config": {
+        "mode": "absolute_anchor_tolerance",
+        "anchor_source": "config",
+        "ref_rpy_deg": [
+          90.0,
+          0.0,
+          90.0
+        ],
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "tolerance_ladder_applied": false,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED"
+      ]
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "original_only",
+      "exit_code": 4,
+      "elapsed_s": 0.08755231100076344,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_104336/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_original_only.yaml",
+        "--grid-x",
+        "0,0,1",
+        "--grid-y",
+        "0,0,1",
+        "--grid-z",
+        "0,0,1",
+        "--no-tol-ladder"
+      ],
+      "error": "{\"success\":false,\"action\":\"optimize\",\"message\":\"Waypoint [50] has no non-singular in-limit IK inside the attitude envelope.\"}\n"
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "raw_verify",
+      "exit_code": 0,
+      "elapsed_s": 0.13660076699852652,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "verify",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_104336/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_raw_verify.yaml"
+      ],
+      "status": "FAILED",
+      "summary": {
+        "status": "FAILED",
+        "total_paths": 1,
+        "total_waypoints": 53,
+        "total_steps": 652,
+        "total_issues": 16,
+        "singularity_count": 3,
+        "overspeed_count": 11,
+        "unreachable_count": 2
+      },
+      "max_normal_deg": 2.2588727439225506e-06,
+      "mean_normal_deg": 5.22257909212125e-07,
+      "max_rel_rpy_deg": [
+        6.361109362927035e-15,
+        1.2722218725854067e-14,
+        3.1805546814635183e-15
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 4887.1,
+      "min_waypoint_speed": 30.0,
+      "poi_config": null,
+      "issue_types": [
+        "WRIST_SINGULARITY",
+        "WRIST_SINGULARITY",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "ELBOW_SINGULARITY",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "KINEMATIC_DISCONTINUITY",
+        "JOINT_OVERSPEED",
+        "UNREACHABLE_STEP"
+      ],
+      "max_envelope_rel_rpy_deg": [
+        6.361109362927035e-15,
+        1.2722218725854067e-14,
+        3.1805546814635183e-15
+      ]
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "spin180",
+      "exit_code": 0,
+      "elapsed_s": 3.407011582999985,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_104336/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_spin180.yaml",
+        "--grid-x",
+        "0,0,1",
+        "--grid-y",
+        "0,0,1",
+        "--grid-z",
+        "-180,180,5",
+        "--max-candidates-per-branch",
+        "73",
+        "--beam-width",
+        "64",
+        "--no-tol-ladder"
+      ],
+      "status": "FAILED",
+      "summary": {
+        "status": "FAILED",
+        "total_paths": 1,
+        "total_waypoints": 53,
+        "total_steps": 652,
+        "total_issues": 9,
+        "singularity_count": 0,
+        "overspeed_count": 7,
+        "unreachable_count": 2
+      },
+      "max_normal_deg": 0.007146891159089966,
+      "mean_normal_deg": 0.00279497355360645,
+      "max_rel_rpy_deg": [
+        0.006991019042601323,
+        0.004753075731961182,
+        120.00238126659077
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 8311.7,
+      "min_waypoint_speed": 30.0,
+      "poi_config": {
+        "mode": "per_waypoint_nominal_envelope",
+        "anchor_source": "raw",
+        "ref_rpy_deg": null,
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "tolerance_ladder_applied": false,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "KINEMATIC_DISCONTINUITY",
+        "JOINT_OVERSPEED",
+        "KINEMATIC_DISCONTINUITY",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED"
+      ],
+      "max_envelope_rel_rpy_deg": [
+        0.006991019042601323,
+        0.004753075731961182,
+        120.00238126659077
+      ]
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "spin180_roundtrip",
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "verify",
+        "--input",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_spin180.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_spin180_roundtrip.yaml",
+        "--seed",
+        "-0.836518380891002,-27.083714975834013,-90.30387809056906,-71.91193286686963,-140.81583730930242,-52.32823542929808"
+      ],
+      "exit_code": 0,
+      "status": "FAILED",
+      "summary": {
+        "status": "FAILED",
+        "total_paths": 1,
+        "total_waypoints": 53,
+        "total_steps": 652,
+        "total_issues": 9,
+        "singularity_count": 0,
+        "overspeed_count": 7,
+        "unreachable_count": 2
+      },
+      "max_normal_deg": 0.007146891159089966,
+      "mean_normal_deg": 0.00279497355360645,
+      "max_rel_rpy_deg": [
+        0.006991019042601323,
+        0.004753075731961182,
+        120.00238126659077
+      ],
+      "max_envelope_rel_rpy_deg": [
+        0.006991019042601323,
+        0.004753075731961182,
+        120.00238126659077
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 8310.3,
+      "min_waypoint_speed": 30.0,
+      "poi_config": null,
+      "issue_types": [
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "KINEMATIC_DISCONTINUITY",
+        "JOINT_OVERSPEED",
+        "KINEMATIC_DISCONTINUITY",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED"
+      ]
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "spin30",
+      "exit_code": 4,
+      "elapsed_s": 0.4400987200006057,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_104336/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_spin30.yaml",
+        "--grid-x",
+        "0,0,1",
+        "--grid-y",
+        "0,0,1",
+        "--no-tol-ladder"
+      ],
+      "error": "{\"success\":false,\"action\":\"optimize\",\"message\":\"Global search failed at segment 46->47\"}\n"
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "tilt1_spin180",
+      "exit_code": 0,
+      "elapsed_s": 4.825969796000209,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_104336/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_tilt1_spin180.yaml",
+        "--grid-x",
+        "-1,1,1",
+        "--grid-y",
+        "-1,1,1",
+        "--grid-z",
+        "-180,180,5",
+        "--max-candidates-per-branch",
+        "73",
+        "--beam-width",
+        "64",
+        "--no-tol-ladder"
+      ],
+      "status": "FAILED",
+      "summary": {
+        "status": "FAILED",
+        "total_paths": 1,
+        "total_waypoints": 53,
+        "total_steps": 652,
+        "total_issues": 9,
+        "singularity_count": 0,
+        "overspeed_count": 7,
+        "unreachable_count": 2
+      },
+      "max_normal_deg": 1.4161365431206938,
+      "mean_normal_deg": 0.7703276256710866,
+      "max_rel_rpy_deg": [
+        1.0068491709222929,
+        1.0038469346952832,
+        120.00181039398792
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 8804.0,
+      "min_waypoint_speed": 30.0,
+      "poi_config": {
+        "mode": "per_waypoint_nominal_envelope",
+        "anchor_source": "raw",
+        "ref_rpy_deg": null,
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "tolerance_ladder_applied": false,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "KINEMATIC_DISCONTINUITY",
+        "JOINT_OVERSPEED",
+        "KINEMATIC_DISCONTINUITY",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED"
+      ],
+      "max_envelope_rel_rpy_deg": [
+        1.0068491709222929,
+        1.0038469346952832,
+        120.00181039398792
+      ]
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "tilt1_spin30",
+      "exit_code": 4,
+      "elapsed_s": 0.4949379779991432,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_104336/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_tilt1_spin30.yaml",
+        "--grid-x",
+        "-1,1,1",
+        "--grid-y",
+        "-1,1,1",
+        "--no-tol-ladder"
+      ],
+      "error": "{\"success\":false,\"action\":\"optimize\",\"message\":\"Global search failed at segment 47->48\"}\n"
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "tilt2_spin30",
+      "exit_code": 0,
+      "elapsed_s": 0.6318698400009453,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_104336/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_tilt2_spin30.yaml",
+        "--grid-x",
+        "-2,2,1",
+        "--grid-y",
+        "-2,2,1",
+        "--no-tol-ladder"
+      ],
+      "status": "FAILED",
+      "summary": {
+        "status": "FAILED",
+        "total_paths": 1,
+        "total_waypoints": 53,
+        "total_steps": 652,
+        "total_issues": 19,
+        "singularity_count": 0,
+        "overspeed_count": 15,
+        "unreachable_count": 4
+      },
+      "max_normal_deg": 2.2363860535650963,
+      "mean_normal_deg": 0.7477622157983171,
+      "max_rel_rpy_deg": [
+        1.9994749257863245,
+        2.001209403588102,
+        30.000931352887537
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 27219.9,
+      "min_waypoint_speed": 30.0,
+      "poi_config": {
+        "mode": "per_waypoint_nominal_envelope",
+        "anchor_source": "raw",
+        "ref_rpy_deg": null,
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "tolerance_ladder_applied": false,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [
+        "KINEMATIC_DISCONTINUITY",
+        "JOINT_OVERSPEED",
+        "KINEMATIC_DISCONTINUITY",
+        "JOINT_OVERSPEED",
+        "KINEMATIC_DISCONTINUITY",
+        "JOINT_OVERSPEED",
+        "KINEMATIC_DISCONTINUITY",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED",
+        "JOINT_OVERSPEED"
+      ],
+      "max_envelope_rel_rpy_deg": [
+        1.9994749257863245,
+        2.001209403588102,
+        30.000931352887537
+      ]
+    },
+    {
+      "group": "2026-09-12_104336",
+      "case": "tilt3_spin30",
+      "exit_code": 4,
+      "elapsed_s": 0.6165989990004164,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/home/zhanlu/robots/AiSprayer/data/template_group/2026-09-12_104336/scan.auto.path.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/2026-09-12_104336_tilt3_spin30.yaml",
+        "--grid-x",
+        "-3,3,1",
+        "--grid-y",
+        "-3,3,1",
+        "--no-tol-ladder"
+      ],
+      "error": "{\"success\":false,\"action\":\"optimize\",\"message\":\"Global search failed at segment 42->43\"}\n"
+    },
+    {
+      "case": "spin13",
+      "exit_code": 0,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/tmp/aisprayer-orientation-audit/single_waypoint51.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/spin13.yaml",
+        "--no-tol-ladder",
+        "--grid-x",
+        "0,0,1",
+        "--grid-y",
+        "0,0,1",
+        "--grid-z",
+        "-13,-13,1"
+      ],
+      "status": "PASS",
+      "summary": {
+        "status": "PASS",
+        "total_paths": 1,
+        "total_waypoints": 1,
+        "total_steps": 1,
+        "total_issues": 0,
+        "singularity_count": 0,
+        "overspeed_count": 0,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 0.004969209360133431,
+      "mean_normal_deg": 0.004969209360133431,
+      "max_rel_rpy_deg": [
+        0.0048664547655849835,
+        0.0010053176519874206,
+        12.995506348059138
+      ],
+      "envelope_violations": 0,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 0.0,
+      "min_waypoint_speed": 150,
+      "poi_config": {
+        "mode": "per_waypoint_nominal_envelope",
+        "anchor_source": "raw",
+        "ref_rpy_deg": null,
+        "tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          10.0,
+          10.0,
+          180.0
+        ],
+        "tolerance_ladder_applied": false,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [],
+      "max_envelope_rel_rpy_deg": [
+        0.0048664547655849835,
+        0.0010053176519874206,
+        12.995506348059138
+      ]
+    },
+    {
+      "case": "zero_envelope",
+      "exit_code": 0,
+      "command": [
+        "/tmp/aisprayer-motion-analysis-build/motion_cli",
+        "--config",
+        "/home/zhanlu/robots/AiSprayer/configs/aisprayer_config.yaml",
+        "optimize",
+        "--input",
+        "/tmp/aisprayer-orientation-audit/single_waypoint51.yaml",
+        "--output",
+        "/tmp/aisprayer-orientation-audit/zero_envelope.yaml",
+        "--no-tol-ladder",
+        "--anchor-tol",
+        "0,0,0"
+      ],
+      "status": "PASS",
+      "summary": {
+        "status": "PASS",
+        "total_paths": 1,
+        "total_waypoints": 1,
+        "total_steps": 1,
+        "total_issues": 0,
+        "singularity_count": 0,
+        "overspeed_count": 0,
+        "unreachable_count": 0
+      },
+      "max_normal_deg": 1.4125532489321495,
+      "mean_normal_deg": 1.4125532489321495,
+      "max_rel_rpy_deg": [
+        0.9968747602593624,
+        1.0008238952629758,
+        14.995778577218616
+      ],
+      "envelope_violations": 1,
+      "max_position_change_mm": 0.0,
+      "peak_deg_s": 0.0,
+      "min_waypoint_speed": 150,
+      "poi_config": {
+        "mode": "per_waypoint_nominal_envelope",
+        "anchor_source": "raw",
+        "ref_rpy_deg": null,
+        "tolerance_rpy_deg": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "adopted_tolerance_rpy_deg": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance_ladder_applied": false,
+        "euler_order": "xyz",
+        "units": "deg"
+      },
+      "issue_types": [],
+      "max_envelope_rel_rpy_deg": [
+        0.9968747602593624,
+        1.0008238952629758,
+        14.995778577218616
+      ]
+    }
+  ]
+}

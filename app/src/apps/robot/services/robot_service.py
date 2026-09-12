@@ -299,6 +299,16 @@ class RobotService:
         """喷涂开关 DO 端口编号 (来自配置 hardware.robot.spray_do_index)"""
         return self._config.spray_do_index
 
+    @property
+    def home_position(self) -> List[float]:
+        """机械臂原点/复位关节角 (来自配置 hardware.robot.home_position / 数据库覆盖)"""
+        return self._config.home_position
+
+    @property
+    def fold_position(self) -> List[float]:
+        """机械臂折叠/收纳关节角 (来自配置 hardware.robot.fold_position / 数据库覆盖)"""
+        return self._config.fold_position
+
     def set_do(self, index: Optional[int] = None, status: int = 1, immediate: bool = True) -> tuple[bool, str]:
         """
         设置机械臂数字输出端口 (DO) 状态。
@@ -418,10 +428,15 @@ class RobotService:
         acc_val = float(acc) if acc is not None else float(self._acc_l)
 
         # 统一转换各段位姿为 RobotPose，并将 spraying 规范为 bool (兼容 "on"/"off" 字符串)
-        norm_segments = [
-            {"spraying": is_spraying_on(seg.get("spraying")), "poses": self._to_robot_poses(seg.get("poses", []))}
-            for seg in segments
-        ]
+        # 逐航点 speeds (mm/s) 与 poses 等长时透传 (奇异降速剖面); 不等长或缺省则丢弃回退到统一速度
+        norm_segments = []
+        for seg in segments:
+            poses = self._to_robot_poses(seg.get("poses", []))
+            speeds = seg.get("speeds")
+            if speeds is not None and len(speeds) != len(poses):
+                logger.warning(f"move_l_segments: segment speeds 长度({len(speeds)}) != poses({len(poses)}), 忽略逐点速度")
+                speeds = None
+            norm_segments.append({"spraying": is_spraying_on(seg.get("spraying")), "poses": poses, "speeds": speeds})
         total_pts = sum(len(s["poses"]) for s in norm_segments)
         if total_pts == 0:
             logger.warning("move_l_segments: 无可执行位姿，已跳过")
@@ -582,7 +597,8 @@ class RobotService:
             logger.warning(f"go_fold: Warning ensuring spray DO is OFF: {e}")
 
         try:
-            return self.move_to_joint([0.0, 0.0, -156.0, 0.0, -170.0, 0.0], speed=speed, acc=acc)
+            target_joints = self.fold_position
+            return self.move_to_joint(target_joints, speed=speed, acc=acc)
         except Exception as e:
             msg = f"Error going fold: {e}"
             logger.error(msg)
@@ -602,7 +618,8 @@ class RobotService:
             logger.warning(f"go_home: Warning ensuring spray DO is OFF: {e}")
 
         try:
-            res = self._driver.go_home(wait=True, velocity=speed, acc=acc)
+            target_joints = self.home_position
+            res = self._driver.go_home(wait=True, velocity=speed, acc=acc, target_joints=target_joints)
             if res == 0:
                 return True, ""
             return False, f"go_home returned error code: {res}"

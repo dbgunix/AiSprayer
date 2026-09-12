@@ -99,7 +99,32 @@ std::vector<Eigen::Matrix3d> PrecomputeOffsets(const AxisGrid& gx, const AxisGri
   for (const auto& rz : Rz)
     for (const auto& ry : Ry)
       for (const auto& rx : Rx) out.push_back(rz * ry * rx);
+
+  // The grid is commonly symmetric with an even step, e.g. [-15, 15, 2].
+  // Such a grid does not contain zero, so without these explicit candidates the
+  // optimizer cannot retain the nominal attitude or change only the spray-axis
+  // spin.  Those are the first attitudes that must be considered.
+  out.push_back(Eigen::Matrix3d::Identity());
+  for (double z : zs) out.push_back(AxisRot(z, 2));
   return out;
+}
+
+// Add a low-cost, normal-preserving rescue family.  A wide user envelope must
+// not be silently narrowed to the configured grid: when the nominal pose has
+// no IK, a rotation about the nozzle axis can often restore IK without moving
+// the spray direction.  We deliberately add only this one-dimensional family
+// here; expanding all three axes across a ±180° envelope would turn every
+// waypoint into an impractical three-dimensional exhaustive search.
+void AppendFullSpinOffsets(std::vector<Eigen::Matrix3d>& offsets, const AxisGrid& grid,
+                           double envelope_z_deg) {
+  const double limit = std::min(180.0, std::abs(envelope_z_deg));
+  if (limit <= 0.0) return;
+  const double step = grid.step_deg > 0.0 ? grid.step_deg : 5.0;
+  for (double z = -limit; z <= limit + 1e-9; z += step) {
+    offsets.push_back(AxisRot(std::max(-limit, std::min(limit, z)), 2));
+  }
+  offsets.push_back(AxisRot(-limit, 2));
+  offsets.push_back(AxisRot(limit, 2));
 }
 
 Eigen::Matrix3d ProjectToAnchor(const Eigen::Matrix3d& R_cand, const Eigen::Matrix3d& R_anc,
@@ -167,10 +192,15 @@ std::pair<std::vector<DpNode>, CandPack> GenerateCandidates(
     const std::vector<Eigen::Matrix3d>& R_off, const OptimizeOptions& opt) {
   const Eigen::Vector3d pos = T_nom.translation();
   const Eigen::Matrix3d R_nom = T_nom.linear();
-  const size_t N = R_off.size();
+  std::vector<Eigen::Matrix3d> offsets = R_off;
+  // Add the full requested self-spin interval independently of the coarse
+  // three-axis grid.  Projection keeps global-anchor candidates inside their
+  // envelope; in raw mode this is a direction-preserving recovery family.
+  if (R_anchor) AppendFullSpinOffsets(offsets, opt.grid_z, tol[2]);
+  const size_t N = offsets.size();
   std::vector<Eigen::Matrix3d> R_cands(N);
   for (size_t i = 0; i < N; ++i) {
-    R_cands[i] = R_nom * R_off[i];
+    R_cands[i] = R_nom * offsets[i];
     if (R_anchor) R_cands[i] = ProjectToAnchor(R_cands[i], *R_anchor, tol);
   }
 
@@ -184,11 +214,14 @@ std::pair<std::vector<DpNode>, CandPack> GenerateCandidates(
   for (size_t i = 0; i < N; ++i) {
     geo[i] = GeodesicDeg(R_nom, R_cands[i]);
     quats[i] = QuatXyzw(R_cands[i]);
+    // The primary quality target is the nozzle direction relative to the
+    // original surface normal, not an Euler-coordinate distance.  Spin is
+    // retained as a very small tie breaker for asymmetric nozzles.
+    const double pointing = PointingDeg(R_nom, R_cands[i]);
     Eigen::Vector3d e = CtrlRpyDegFromRot(R_nom.transpose() * R_cands[i]);
-    e[0] = Wrap180(e[0]);
-    e[1] = Wrap180(e[1]);
     e[2] = Wrap180(e[2]);
-    pose_dev[i] = e.cwiseAbs2().dot(opt.weight_zero_dev);
+    pose_dev[i] = opt.pointing_cost_weight * pointing * pointing +
+                  opt.spin_cost_weight * e[2] * e[2];
     const QuatKey key = MakeQuatKey(quats[i]);
     auto it = slot_of.find(key);
     if (it == slot_of.end()) {
@@ -280,7 +313,18 @@ EdgeOut CheckMoveL(const Cr5Kinematics& kin, const ToolOffset& tool, const Optim
     auto hint = UnwrapOnto(b.q_branch, q_start, kin);
     if (!hint) hint = b.q_branch;
     if (!IsSafeQ(kin, *hint, b.T, tool)) return out;
-    const JointVec dq = WrapPi(*hint - q_start);
+    JointVec dq;
+    for (int j = 0; j < 6; ++j) {
+      const double span = kin.limits().max_rad[j] - kin.limits().min_rad[j];
+      const double unwrapped_j = q_start[j] + WrapPi((*hint)[j] - q_start[j]);
+      if (span > 2.0 * kPi + 0.1 || (unwrapped_j >= kin.limits().min_rad[j] - kJointTol &&
+                                     unwrapped_j <= kin.limits().max_rad[j] + kJointTol)) {
+        dq[j] = WrapPi((*hint)[j] - q_start[j]);
+      } else {
+        // 有界关节无法跨越 ±180° 硬件限位，其实际转动量为未环绕的真实角位移
+        dq[j] = (*hint)[j] - q_start[j];
+      }
+    }
     double cost = 0.0;
     for (int j = 0; j < 6; ++j) {
       const double d = Deg(dq[j]);
@@ -296,11 +340,13 @@ EdgeOut CheckMoveL(const Cr5Kinematics& kin, const ToolOffset& tool, const Optim
   if (!hint) return out;
   if ((a.ew_family) != (b.ew_family)) return out;
 
-  const Transform Tf_a = a.T * tool.T_tcp_inv;
-  const Transform Tf_b = b.T * tool.T_tcp_inv;
-  const Eigen::Vector3d p0 = Tf_a.translation();
-  const Eigen::Vector3d p1 = Tf_b.translation();
+  // Keep the DP edge model identical to the executed / verified command:
+  // interpolate a TCP MoveL, then apply the fixed TCP→flange transform for IK.
+  const Eigen::Vector3d p0 = a.T.translation();
+  const Eigen::Vector3d p1 = b.T.translation();
   const double dist_mm = (p1 - p0).norm() * kMmPerM;
+  // 段时长 dt_seg = 段长(mm) / 线速度(mm/s) → 秒；用于把关节位移折算成真实 °/s。
+  const double dt_seg = (opt.exec_speed_mm_s > 0.0) ? dist_mm / opt.exec_speed_mm_s : 0.0;
   double travel = 0.0;
   {
     const JointVec dq = WrapPi(*hint - q_start);
@@ -317,8 +363,8 @@ EdgeOut CheckMoveL(const Cr5Kinematics& kin, const ToolOffset& tool, const Optim
   MoveLQuery q;
   q.p_start_m = p0;
   q.p_end_m = p1;
-  q.quat1_xyzw = QuatXyzw(Tf_a.linear());
-  q.quat2_xyzw = QuatXyzw(Tf_b.linear());
+  q.quat1_xyzw = QuatXyzw(a.T.linear());
+  q.quat2_xyzw = QuatXyzw(b.T.linear());
   q.q_start = q_start;
   q.alphas = alphas;
   q.q_branch_end = b.q_branch;
@@ -326,11 +372,49 @@ EdgeOut CheckMoveL(const Cr5Kinematics& kin, const ToolOffset& tool, const Optim
   q.max_jump_rad = Rad(kBranchJumpDeg);
   q.match_rad = Rad(kEndBranchMatchDeg);
   q.weights = opt.joint_weights;
-  auto walk = SegmentChecker(kin).Walk(q);
+  auto walk = SegmentChecker(kin, tool).Walk(q);
   if (!walk) return out;
   out.ok = true;
   out.cost = walk->cost;
   out.q = walk->q_end;
+
+  // ⑤ 边内关节速度约束：把该段按执行线速度折算成真实 °/s。
+  // 超硬阈(ratio > vel_hard_ratio) 的边直接判不可行 → DP 换 IK 分支或在包络内换姿态；
+  // 超软阈(ratio > vel_soft_ratio) 的边加二次惩罚 → 未达硬阈时也倾向选更慢的链。
+  // 注意：此处用段两端关节差（持续型超速，如 J4~200°/s）折算，与校验器同口径。
+  if (opt.enforce_vel_limit && dt_seg > 1e-9) {
+    // ⑤-A 与校验器同口径：近奇异段执行侧会降速，dt 放大 1/scale，
+    // 故该边折算角速度按降速后评估，避免 DP 把奇异段误判为不可行而退到更差分支。
+    double eff_dt = dt_seg;
+    if (opt.singularity_scaling) {
+      const double sc = std::min(
+          SingularitySpeedScale(q_start[4], Rad(opt.singularity_ref_deg), opt.singularity_min_scale),
+          SingularitySpeedScale(out.q[4], Rad(opt.singularity_ref_deg), opt.singularity_min_scale));
+      if (sc > 0.0) eff_dt = dt_seg / sc;
+    }
+    const JointVec dq_seg = WrapPi(out.q - q_start);
+    double vel_pen = 0.0;
+    bool over_hard = false;
+    for (int j = 0; j < 6; ++j) {
+      const double lim = kin.limits().max_vel_deg_s[j];
+      if (lim <= 0.0) continue;
+      const double ratio = (std::abs(Deg(dq_seg[j])) / eff_dt) / lim;  // 峰值角速度 / 限速
+      if (opt.vel_hard_ratio > 0.0 && ratio > opt.vel_hard_ratio) {
+        over_hard = true;
+        break;
+      }
+      if (ratio > opt.vel_soft_ratio) {
+        const double x = ratio - opt.vel_soft_ratio;
+        vel_pen += x * x;
+      }
+    }
+    if (over_hard) {
+      out.ok = false;
+      out.q = JointVec::Zero();
+      return out;
+    }
+    out.cost += opt.vel_cost_weight * vel_pen;
+  }
   return out;
 }
 
@@ -355,6 +439,25 @@ std::string OptimizeOptions::Validate() const {
   if (movel_spacing_mm <= 0.0) return "movel_spacing_mm must be > 0";
   if (movel_checks_min < 1 || movel_checks_max < movel_checks_min) {
     return "movel_checks_min/max must satisfy 1 <= min <= max";
+  }
+  if (!(pointing_cost_weight > 0.0) || !(spin_cost_weight >= 0.0)) {
+    return "pointing_cost_weight must be > 0 and spin_cost_weight must be >= 0";
+  }
+  if (enforce_vel_limit) {
+    // 速度约束必须拿到正线速度才能折算 dt；soft/hard 比例需为正且 hard ≥ soft。
+    if (!(exec_speed_mm_s > 0.0)) return "exec_speed_mm_s must be > 0 when enforce_vel_limit";
+    if (!(vel_soft_ratio > 0.0) || vel_soft_ratio > 2.0) return "vel_soft_ratio must be within (0, 2]";
+    if (!(vel_cost_weight >= 0.0)) return "vel_cost_weight must be >= 0";
+    if (vel_hard_ratio < 0.0) return "vel_hard_ratio must be >= 0 (0 = penalty only, no hard ban)";
+    if (vel_hard_ratio > 0.0 && vel_hard_ratio < vel_soft_ratio)
+      return "vel_hard_ratio must be >= vel_soft_ratio (or 0 to disable hard ban)";
+  }
+  if (singularity_scaling) {
+    // |J5| 参考角必须在 (0,90]；缩放下限在 (0,1]（=1 等于不减速）。
+    if (!(singularity_ref_deg > 0.0) || singularity_ref_deg > 90.0)
+      return "singularity_ref_deg must be within (0, 90]";
+    if (!(singularity_min_scale > 0.0) || singularity_min_scale > 1.0)
+      return "singularity_min_scale must be within (0, 1]";
   }
   if (tol_ladder) {
     // 比例必须在 (0,1)：≥1 等于重跑请求档，≤0 会把包络塌缩成空集。
@@ -395,7 +498,9 @@ OptimizeResult ViterbiOptimizer::OptimizeOnce(const PathItem& path, const Anchor
     std::optional<Eigen::Matrix3d> R_a;
     if (anchor.has_global()) {
       R_a = *anchor.R;
-    } else if (anchor.tol_deg.norm() > 0.0) {
+    } else {
+      // A zero raw envelope means "retain this exact nominal attitude", not
+      // "disable the envelope".  Keep the local anchor for every tolerance.
       R_a = path.points[static_cast<size_t>(i)].tcp_pose.linear();
     }
     auto [fast, pack] = GenerateCandidates(kin_, tool_, path.points[static_cast<size_t>(i)].tcp_pose,
@@ -599,7 +704,8 @@ OptimizeResult ViterbiOptimizer::OptimizeOnce(const PathItem& path, const Anchor
   result.objective = best;  // DP 回溯起点的累计代价（已含末节点的姿态偏置）
 
   if (verifier_ && opt_.dense_verify && n >= 2) {
-    result.verify = verifier_->Verify(result.path, q_seed);
+    const JointVec seed_for_verify = result.joints_rad.empty() ? q_seed : result.joints_rad[0];
+    result.verify = verifier_->Verify(result.path, seed_for_verify);
     bool hard = result.verify.status == "FAILED";
     for (const auto& iss : result.verify.issues) {
       if (iss.severity == "ERROR" || iss.type.find("SINGULARITY") != std::string::npos) hard = true;
@@ -641,8 +747,8 @@ std::vector<Eigen::Vector3d> BuildToleranceLadder(const Eigen::Vector3d& tol,
 // 择优标尺（全部与容差无关，所以跳档可比）：
 //   ① 校验状态 PASS(0) < WARNING/UNVERIFIED(1) < FAILED(2)
 //   ② 指向偏量护栏（未越界优先）
-//   ③ 峰值角速度 / 关节限速
-//   ④ 最大指向偏量（喷嘴偏离表面法向）
+//   ③ 最大指向偏量（喷嘴偏离表面法向）
+//   ④ 峰值角速度 / 关节限速
 //   ⑤ DP 总代价 J
 int StatusRank(const std::string& status) {
   if (status == "PASS") return 0;
@@ -722,8 +828,8 @@ bool RungBetter(const LadderRung& a, const LadderRung& b, double base_pointing,
   if (ra != rb) return ra < rb;
   const bool ga = PointingOk(a, base_pointing, opt), gb = PointingOk(b, base_pointing, opt);
   if (ga != gb) return ga;
-  if (a.peak_ratio != b.peak_ratio) return a.peak_ratio < b.peak_ratio;
   if (a.max_pointing_deg != b.max_pointing_deg) return a.max_pointing_deg < b.max_pointing_deg;
+  if (a.peak_ratio != b.peak_ratio) return a.peak_ratio < b.peak_ratio;
   return a.objective < b.objective;
 }
 
@@ -741,6 +847,32 @@ std::string FmtTol(const Eigen::Vector3d& t) {
 
 OptimizeResult ViterbiOptimizer::Optimize(const PathItem& path, const Anchor& anchor,
                                           std::optional<JointVec> init_q) const {
+  // In per-waypoint mode, retaining every original pose is the best possible
+  // normal result.  Test that exact chain before introducing any orientation
+  // freedom.  This also avoids changing a path that only needed a different IK
+  // branch.  If it is unreachable or fails dense verification, the regular
+  // envelope search below is allowed to repair it.
+  if (!anchor.has_global() && verifier_ && opt_.dense_verify && path.points.size() >= 2) {
+    OptimizeOptions exact_opt = opt_;
+    exact_opt.grid_x = {0.0, 0.0, 1.0};
+    exact_opt.grid_y = {0.0, 0.0, 1.0};
+    exact_opt.grid_z = {0.0, 0.0, 1.0};
+    exact_opt.tol_ladder = false;
+    try {
+      ViterbiOptimizer exact(kin_, tool_, exact_opt, verifier_);
+      OptimizeResult retained = exact.OptimizeOnce(path, anchor, init_q, " [原姿态预检]", false);
+      if (retained.verify.status == "PASS") {
+        std::cerr << "✅ [SprayOpt] 原始姿态已形成安全连续逆解链；保留全部原始法向。\n"
+                  << std::flush;
+        return retained;
+      }
+    } catch (const std::exception&) {
+      // A strict nominal chain is only a preflight.  The requested envelope
+      // remains available for recovery below, where the actionable error is
+      // reported if all candidates fail.
+    }
+  }
+
   const std::vector<Eigen::Vector3d> rungs = BuildToleranceLadder(anchor.tol_deg, opt_);
   if (rungs.size() <= 1) {
     // 单档（阶梯关闭或比例列表为空）：行为与日志跟以前完全一致。
@@ -758,7 +890,6 @@ OptimizeResult ViterbiOptimizer::Optimize(const PathItem& path, const Anchor& an
   OptimizeResult best;
   LadderRung best_rung;
   bool have_best = false;
-  bool stopped_early = false;  // 区分“请求档已达标而早停”与“其余档被惰性跳过”
   double base_pointing = std::numeric_limits<double>::quiet_NaN();  // 请求档的指向偏量（护栏基准）
   std::string first_error;  // 请求档抛出的异常：全部档位均失败时原样抛出，保持旧语义
 
@@ -805,13 +936,15 @@ OptimizeResult ViterbiOptimizer::Optimize(const PathItem& path, const Anchor& an
         have_best = true;
         std::cerr << head << "    ↑ 当前最优\n" << std::flush;
       }
+      // A lower-speed rung is never allowed to stop the search when it has
+      // worse pointing.  Early exit is safe only once the original normal is
+      // retained exactly: no later rung can improve on zero angular error.
       if (has_verify && have_best && best_rung.status == "PASS" &&
-          PointingOk(best_rung, base_pointing, opt_) && opt_.tol_ladder_stop_peak_ratio > 0.0 &&
+          best_rung.max_pointing_deg <= 1e-6 && opt_.tol_ladder_stop_peak_ratio > 0.0 &&
           best_rung.peak_ratio <= opt_.tol_ladder_stop_peak_ratio) {
-        std::cerr << "   ✅ 早停: 峰值已降到限速的 " << Num(best_rung.peak_ratio * 100.0)
-                  << "%（阈值 " << Num(opt_.tol_ladder_stop_peak_ratio * 100.0) << "%）\n"
+        std::cerr << "   ✅ 早停: 已保持原始法向且峰值为限速的 "
+                  << Num(best_rung.peak_ratio * 100.0) << "%\n"
                   << std::flush;
-        stopped_early = true;
         break;
       }
     } catch (const std::exception& e) {
@@ -845,8 +978,7 @@ OptimizeResult ViterbiOptimizer::Optimize(const PathItem& path, const Anchor& an
   std::cerr << "✅ [SprayOpt] 采纳包络 " << FmtTol(best.adopted_tol_deg)
             << (multi_rung ? "（阶梯第 " + std::to_string(adopted_idx + 1) + "/" +
                                  std::to_string(ladder.size()) + " 档）"
-                           : (stopped_early ? "（请求档已达标，未再收紧）"
-                                            : "（请求档；其余档与之等价或无可行解）"))
+                           : "（请求档；其余档与之等价或无可行解）")
             << "，峰值 " << Num(best_rung.peak_deg_s) << "°/s (" << Num(best_rung.peak_ratio * 100.0)
             << "% 限速)，status=" << best_rung.status << "，阶梯总耗时 " << Num(best.elapsed_ms, 2)
             << " ms\n"

@@ -25,6 +25,15 @@ struct SprayingConfig {
   std::vector<double> tol_ladder_scales{0.5, 1.0 / 3.0, 0.25};
   double tol_ladder_stop_peak_ratio = 0.3;
   double tol_ladder_max_pointing_deg = 0.0;
+  // ⑤ 边内关节速度约束（对应 OptimizeOptions 同名字段）：部署侧可不重编调整。
+  bool opt_enforce_vel_limit = true;
+  double opt_vel_soft_ratio = 0.9;
+  double opt_vel_cost_weight = 40.0;
+  double opt_vel_hard_ratio = 1.15;
+  // ⑤-A 腕部奇异自适应降速（verifier 与 optimizer 同名同值，保证选边与终校口径一致）。
+  bool singularity_scaling = false;
+  double singularity_ref_deg = 25.0;
+  double singularity_min_scale = 0.2;
 };
 
 bool LoadSprayingConfig(const std::string& yaml_path, SprayingConfig& out, std::string* err);

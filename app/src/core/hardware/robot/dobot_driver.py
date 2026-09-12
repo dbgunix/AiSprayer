@@ -448,19 +448,34 @@ class DobotDriver(BaseRobotDriver):
         dec: float = 20.0,
         tool_num: Optional[int] = None,
         wait: bool = True,
-        cp_ratio: int = 50
+        cp_ratio: int = 50,
+        speeds: Optional[List[float]] = None
     ) -> int:
         if not self._connected or not self.move:
             return -2
             
         tool = self.tool_num if tool_num is None else tool_num
+        # speeds: 逐航点目标 TCP 线速度 (mm/s, 与 poses 等长), 仅在奇异降速使能时由上层传入。
+        # 与现有"每个 segment 重新下发 TCPSpeed 而不 End"的用法同源: 队列内覆写当前速度不阻断 CP。
+        # None / 长度不匹配 / 无 dashboard 时完全回退到整批单一 TCPSpeed(velocity) 行为 (零回归)。
+        use_speeds = bool(speeds) and len(speeds) == len(poses) and self.dashboard is not None
         try:
             if self.dashboard:
                 r = self.dashboard.CP(cp_ratio)
                 logger.debug(f"CP({cp_ratio}): {r}")
-                r = self.dashboard.TCPSpeed(velocity)
-                logger.debug(f"TCPSpeed({velocity}): {r}")
-            for pose in poses:
+                if not use_speeds:
+                    r = self.dashboard.TCPSpeed(velocity)
+                    logger.debug(f"TCPSpeed({velocity}): {r}")
+            cur_v: Optional[int] = None
+            for idx, pose in enumerate(poses):
+                if use_speeds:
+                    # 近奇异航点按可操作度比例压低线速度; 同一整数速度不重复下发
+                    raw = speeds[idx] if (idx < len(speeds) and speeds[idx] and speeds[idx] > 0) else velocity
+                    v_i = max(1, int(round(raw)))
+                    if v_i != cur_v:
+                        r = self.dashboard.TCPSpeed(v_i)
+                        logger.debug(f"TCPSpeed({v_i}) [waypoint {idx}]: {r}")
+                        cur_v = v_i
                 lst = _to_list(pose)
                 x, y, z = lst[0] + 0.0, lst[1] + 0.0, lst[2] + 0.0
                 rx_deg, ry_deg, rz_deg = math.degrees(lst[3]) + 0.0, math.degrees(lst[4]) + 0.0, math.degrees(lst[5]) + 0.0
@@ -472,7 +487,7 @@ class DobotDriver(BaseRobotDriver):
                     return resp.error_id
                 logger.info(f"MovL sent: {x,y,z,rx_deg,ry_deg,rz_deg}, tool={tool}, response {r}")
                 
-            logger.info(f"Sent {len(poses)} MovL commands sequentially via move.MovL (tool={tool})")
+            logger.info(f"Sent {len(poses)} MovL commands sequentially via move.MovL (tool={tool}, per_waypoint_speed={use_speeds})")
                 
         except DobotApiError as e:
             if self.dashboard:
@@ -522,7 +537,7 @@ class DobotDriver(BaseRobotDriver):
             return 20.0, 20.0, 20.0, 20.0
         return self._cached_speed_l, self._cached_acc_l, self._cached_speed_j, self._cached_acc_j
 
-    def go_home(self, wait: bool = True, velocity: Optional[float] = None, acc: Optional[float] = None) -> int:
+    def go_home(self, wait: bool = True, velocity: Optional[float] = None, acc: Optional[float] = None, target_joints: Optional[List[float]] = None) -> int:
         vel = velocity if velocity is not None else 20.0
         acc_val = acc if acc is not None else 20.0
         # Force-discard any stale data that may have accumulated on the 30003 move port
@@ -534,8 +549,9 @@ class DobotDriver(BaseRobotDriver):
                 logger.info("go_home: Cleared move port (30003) receive buffer")
             except Exception as e:
                 logger.warning(f"go_home: Failed to clear move port buffer: {e}")
-        # Default home position for Dobot
-        return self.move_joint([0, 0, -90, -90, -90, 0], velocity=vel, acc=acc_val, wait=wait)
+        # Move to configured or fallback home position for Dobot
+        joints = target_joints if target_joints is not None else [0.0, 0.0, -90.0, -90.0, -90.0, 0.0]
+        return self.move_joint(joints, velocity=vel, acc=acc_val, wait=wait)
 
     def pause(self) -> bool:
         if not self._connected:

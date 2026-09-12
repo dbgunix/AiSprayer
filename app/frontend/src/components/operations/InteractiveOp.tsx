@@ -126,6 +126,7 @@ const InteractiveOp: React.FC<InteractiveOpProps> = ({
   const [autoPoiReport, setAutoPoiReport] = useState<VerificationReport | null>(null);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
+  const [bypassVerification, setBypassVerification] = useState<boolean>(false);
 
   // ─── 6. Action Execution State ──────────────────────────────────────────
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
@@ -912,15 +913,6 @@ const InteractiveOp: React.FC<InteractiveOpProps> = ({
       || (stateType === 'poi' ? poiReport
         : (stateType === 'auto_poi' ? autoPoiReport
           : (stateType === 'auto' ? autoReport : rawReport)));
-    if (!rep?.path_reports || rep.path_reports.length === 0) {
-      showNotice('info', `No trajectory for ${stateType.toUpperCase()}. Verify first.`);
-      return;
-    }
-
-    // Filter target path reports if a specific path is requested
-    const targetReports = (targetPathId !== undefined && targetPathId !== null)
-      ? rep.path_reports.filter((pr: any, idx: number) => (pr.path_id === targetPathId || idx + 1 === targetPathId))
-      : rep.path_reports;
 
     // Build dense playback steps
     const simSteps: Array<{
@@ -930,43 +922,99 @@ const InteractiveOp: React.FC<InteractiveOpProps> = ({
       pathIdx: number;
     }> = [];
 
-    targetReports.forEach((pr, pIdx) => {
-      const realPIdx = rep.path_reports ? rep.path_reports.indexOf(pr) : pIdx;
-      const tq = pr.trajectory_q || [];
-      const tt = pr.trajectory_tcp || [];
-      const totalPSteps = Math.min(tq.length, tt.length);
+    if (rep?.path_reports && rep.path_reports.length > 0) {
+      // Filter target path reports if a specific path is requested
+      const targetReports = (targetPathId !== undefined && targetPathId !== null)
+        ? rep.path_reports.filter((pr: any, idx: number) => (pr.path_id === targetPathId || idx + 1 === targetPathId))
+        : rep.path_reports;
 
-      for (let s = 0; s < totalPSteps; s++) {
-        const q_rad = tq[s];
-        const q_deg = q_rad.map((r) => (r * 180.0) / Math.PI);
-        const tcpArr = tt[s];
-        const tcpPose = {
-          x: tcpArr[0],
-          y: tcpArr[1],
-          z: tcpArr[2],
-          rx: tcpArr[3],
-          ry: tcpArr[4],
-          rz: tcpArr[5],
-        };
+      targetReports.forEach((pr, pIdx) => {
+        const realPIdx = rep.path_reports ? rep.path_reports.indexOf(pr) : pIdx;
+        const tq = pr.trajectory_q || [];
+        const tt = pr.trajectory_tcp || [];
+        const totalPSteps = Math.min(tq.length, tt.length);
 
-        // Project base 3D point to 2D pixel
-        let pixelProj: [number, number] | null = null;
-        if (sessionData) {
-          pixelProj = projectBasePointToPixel(
-            [tcpArr[0], tcpArr[1], tcpArr[2]],
-            sessionData.T,
-            { fx: sessionData.fx, fy: sessionData.fy, cx: sessionData.cx, cy: sessionData.cy }
-          );
+        for (let s = 0; s < totalPSteps; s++) {
+          const q_rad = tq[s];
+          const q_deg = q_rad.map((r) => (r * 180.0) / Math.PI);
+          const tcpArr = tt[s];
+          const tcpPose = {
+            x: tcpArr[0],
+            y: tcpArr[1],
+            z: tcpArr[2],
+            rx: tcpArr[3],
+            ry: tcpArr[4],
+            rz: tcpArr[5],
+          };
+
+          // Project base 3D point to 2D pixel
+          let pixelProj: [number, number] | null = null;
+          if (sessionData) {
+            pixelProj = projectBasePointToPixel(
+              [tcpArr[0], tcpArr[1], tcpArr[2]],
+              sessionData.T,
+              { fx: sessionData.fx, fy: sessionData.fy, cx: sessionData.cx, cy: sessionData.cy }
+            );
+          }
+
+          simSteps.push({
+            q_deg,
+            tcp: tcpPose,
+            pixel: pixelProj,
+            pathIdx: realPIdx >= 0 ? realPIdx : pIdx,
+          });
         }
+      });
+    } else if (bypassVerification) {
+      // Direct waypoint simulation when kinematics verification is bypassed
+      const srcPaths = pathsForState(stateType);
+      const filteredPaths = (targetPathId !== undefined && targetPathId !== null)
+        ? srcPaths.filter((p) => p.path_id === targetPathId)
+        : srcPaths;
 
-        simSteps.push({
-          q_deg,
-          tcp: tcpPose,
-          pixel: pixelProj,
-          pathIdx: realPIdx >= 0 ? realPIdx : pIdx,
-        });
-      }
-    });
+      filteredPaths.forEach((path, pIdx) => {
+        const points = path.points || [];
+        for (let i = 0; i < points.length; i++) {
+          const pt = points[i];
+          const nextPt = i < points.length - 1 ? points[i + 1] : null;
+
+          // Dense interpolation between consecutive waypoints for smooth visualization (~10 sub-steps)
+          const subSteps = nextPt ? 10 : 1;
+          for (let s = 0; s < subSteps; s++) {
+            const alpha = s / subSteps;
+            const interpTcp = nextPt ? {
+              x: pt.tcp_pose_base.x + (nextPt.tcp_pose_base.x - pt.tcp_pose_base.x) * alpha,
+              y: pt.tcp_pose_base.y + (nextPt.tcp_pose_base.y - pt.tcp_pose_base.y) * alpha,
+              z: pt.tcp_pose_base.z + (nextPt.tcp_pose_base.z - pt.tcp_pose_base.z) * alpha,
+              rx: pt.tcp_pose_base.rx + (nextPt.tcp_pose_base.rx - pt.tcp_pose_base.rx) * alpha,
+              ry: pt.tcp_pose_base.ry + (nextPt.tcp_pose_base.ry - pt.tcp_pose_base.ry) * alpha,
+              rz: pt.tcp_pose_base.rz + (nextPt.tcp_pose_base.rz - pt.tcp_pose_base.rz) * alpha,
+            } : pt.tcp_pose_base;
+
+            let pixelProj: [number, number] | null = null;
+            if (sessionData) {
+              pixelProj = projectBasePointToPixel(
+                [interpTcp.x, interpTcp.y, interpTcp.z],
+                sessionData.T,
+                { fx: sessionData.fx, fy: sessionData.fy, cx: sessionData.cx, cy: sessionData.cy }
+              );
+            } else if (pt.pixel) {
+              pixelProj = pt.pixel;
+            }
+
+            simSteps.push({
+              q_deg: [0, 0, 0, 0, 0, 0],
+              tcp: interpTcp,
+              pixel: pixelProj,
+              pathIdx: path.path_id !== undefined ? path.path_id : pIdx,
+            });
+          }
+        }
+      });
+    } else {
+      showNotice('info', `No trajectory for ${stateType.toUpperCase()}. Verify first.`);
+      return;
+    }
 
     if (simSteps.length === 0) {
       showNotice('info', `No steps for ${stateType.toUpperCase()}`);
@@ -1141,11 +1189,13 @@ const InteractiveOp: React.FC<InteractiveOpProps> = ({
     const targetState = stateType || activeState;
     handleSelectActiveState(targetState);
 
-    // Safety validation guard: Physical robot execution requires verified PASS
-    const rep = targetState === 'poi' ? poiReport : (targetState === 'auto_poi' ? autoPoiReport : (targetState === 'auto' ? autoReport : rawReport));
-    if (!rep || (rep.summary?.status !== 'PASS' && rep.status !== 'PASS')) {
-      showNotice('warning', `Unverified: Verify ${targetState.toUpperCase()} first`);
-      return;
+    // Safety validation guard: Physical robot execution requires verified PASS unless bypass is enabled
+    if (!bypassVerification) {
+      const rep = targetState === 'poi' ? poiReport : (targetState === 'auto_poi' ? autoPoiReport : (targetState === 'auto' ? autoReport : rawReport));
+      if (!rep || (rep.summary?.status !== 'PASS' && rep.status !== 'PASS')) {
+        showNotice('warning', `Unverified: Verify ${targetState.toUpperCase()} first`);
+        return;
+      }
     }
 
     // Lock execution button immediately and initiate action HUD
@@ -1191,6 +1241,7 @@ const InteractiveOp: React.FC<InteractiveOpProps> = ({
         body: JSON.stringify({
           file_name: fileName,
           path_id: pathId,
+          skip_verification: bypassVerification,
         }),
       });
       if (!res.ok) {
@@ -1641,6 +1692,8 @@ const InteractiveOp: React.FC<InteractiveOpProps> = ({
               onOptimizePath={handleOptimizePath}
               onSimulatePath={(st, pId) => startSimulation(st, pId)}
               onExecutePath={(fileName, st, pId) => handleDirectExecutePath(fileName, st, pId)}
+              bypassVerification={bypassVerification}
+              onToggleBypassVerification={setBypassVerification}
               onSelectFile={(fileName) => {
                 if (fileName.includes('auto.poi')) {
                   handleSelectActiveState('auto_poi');

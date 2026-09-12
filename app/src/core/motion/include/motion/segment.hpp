@@ -52,6 +52,7 @@ struct MoveLWalk {
 class SegmentChecker {
  public:
   explicit SegmentChecker(const Cr5Kinematics& kin);
+  SegmentChecker(const Cr5Kinematics& kin, const ToolOffset& tool);
 
   std::optional<MoveLWalk> Walk(const MoveLQuery& q) const;
 
@@ -64,6 +65,7 @@ class SegmentChecker {
 
  private:
   const Cr5Kinematics& kin_;
+  const ToolOffset* tool_ = nullptr;  // null keeps the C ABI flange-pose contract
 };
 
 }  // namespace motion

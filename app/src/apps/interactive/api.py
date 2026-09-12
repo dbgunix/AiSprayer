@@ -594,9 +594,9 @@ def get_robot_anchor_pose(source: str = "home"):
 
     solver = CR5Kinematics()
     
-    # 1. Dobot home joint angles must match DobotDriver.go_home(): JointMovJ([0, 0, -90, -90, -90, 0]).
+    # 1. Dobot home joint angles from system configuration.
     # Use controller-frame FK here so POI Home anchor Rx/Ry/Rz matches Dobot TCP pose convention.
-    home_deg = [0.0, 0.0, -90.0, -90.0, -90.0, 0.0]
+    home_deg = sprayer_config.home_position
     home_rad = [math.radians(v) for v in home_deg]
     home_xyz, home_rpy_raw = solver.forward_controller(home_rad)
     home_xyz = [round(float(v), 2) for v in home_xyz]
@@ -758,20 +758,63 @@ def _group_points_into_segments(points_data: List[dict]) -> List[dict]:
     """
     按相邻航点的 spraying 状态进行游程合并 (Run-Length Encoding)。
     连续相同 spraying 状态的航点合并为同一段，使 DO 开关只在状态转换边界触发一次。
-    输入项格式: {"pose": dict, "spraying": bool}，返回格式: [{"spraying": bool, "poses": [pose_dict, ...]}, ...]
+    输入项格式: {"pose": dict, "spraying": bool, "speed": Optional[float]}，
+    返回格式: [{"spraying": bool, "poses": [pose_dict, ...], "speeds": [Optional[float], ...]}, ...]
+    (speeds 仅当至少一个航点带逐点速度时才输出, 保证未启用降速时与旧行为一致)
     """
     segments: List[dict] = []
     for item in points_data:
+        speed = item.get("speed")
         if segments and segments[-1]["spraying"] == item["spraying"]:
             segments[-1]["poses"].append(item["pose"])
+            segments[-1]["_speeds"].append(speed)
         else:
-            segments.append({"spraying": item["spraying"], "poses": [item["pose"]]})
+            segments.append({"spraying": item["spraying"], "poses": [item["pose"]], "_speeds": [speed]})
+    for seg in segments:
+        if any(s is not None for s in seg["_speeds"]):
+            seg["speeds"] = seg["_speeds"]
+        seg.pop("_speeds", None)
     return segments
+
+
+def _singularity_speed_scales(verification: dict, path_id) -> Optional[List[float]]:
+    """
+    从 verification.path_reports 中取与 path_id 匹配的逐航点降速剖面, 换算为 ∈ (0,1] 的速度比例列表。
+    剖面语义: waypoint_speed_mm_s[i] = 生成时名义速度 nominal × scale_i, 故 scale_i = profile[i] / nominal。
+    nominal 优先取报告内 speed_mm_s, 回退 verification.nominal_speed_mm_s 或 max(profile)。
+    未启用/剖面缺失/长度非法时返回 None (调用方不附加逐点速度 → 保持原有匀速行为)。
+    """
+    reports = (verification or {}).get("path_reports") or []
+    rep = next((r for r in reports if r.get("path_id") == path_id), None)
+    if rep is None and len(reports) == 1:
+        rep = reports[0]  # 单路径文件容忍 path_id 不一致
+    if not rep:
+        return None
+    profile = rep.get("waypoint_speed_mm_s") or []
+    if not profile:
+        return None
+    try:
+        nominal = float(rep.get("speed_mm_s") or (verification or {}).get("nominal_speed_mm_s") or 0.0)
+    except (TypeError, ValueError):
+        nominal = 0.0
+    if nominal <= 0:
+        nominal = max(profile)
+    if nominal <= 0:
+        return None
+    scales: List[float] = []
+    for v in profile:
+        try:
+            s = float(v) / nominal
+        except (TypeError, ValueError):
+            s = 1.0
+        scales.append(min(1.0, s) if s > 0 else 1.0)
+    return scales
 
 
 class ExecuteYamlPathRequest(BaseModel):
     file_name: str
     path_id: Optional[int] = None # None or 0 means all paths, 1-based index/ID
+    skip_verification: bool = False # When True, bypasses kinematic verification status check
     # Linear motion parameters (MoveL queue)
     speed_l: Optional[float] = None # mm/s (笛卡尔线速度)
     acc_l: Optional[float] = None   # % (笛卡尔加速度百分比)
@@ -852,10 +895,10 @@ def execute_yaml_path(name: str, req: ExecuteYamlPathRequest):
     if not raw_paths:
         raise HTTPException(status_code=400, detail=f"No paths found in {req.file_name}")
 
-    # 严密安全防护：物理机械臂只允许执行校验状态为 PASS 的安全路径，严防执行 FAILED 或未校验路径
+    # 严密安全防护：物理机械臂只允许执行校验状态为 PASS 的安全路径，严防执行 FAILED 或未校验路径（开启 skip_verification 则放行直接执行）
     verification = data.get("verification") or {}
     ver_status = str(verification.get("status") or verification.get("summary", {}).get("status") or "").upper()
-    if ver_status != "PASS":
+    if not req.skip_verification and ver_status != "PASS":
         err_msg = (
             f"Cannot execute '{req.file_name}': Path verification status is '{ver_status or 'UNVERIFIED'}'. "
             "Only paths verified with status 'PASS' can be executed on the physical robot."
@@ -863,6 +906,11 @@ def execute_yaml_path(name: str, req: ExecuteYamlPathRequest):
         logger.error(f"❌ [Robot Execution] {err_msg}")
         robot_service.broadcast_exec_status(action=f"Path kinematics verification failed ({ver_status or 'UNVERIFIED'})", stage="error")
         raise HTTPException(status_code=400, detail=err_msg)
+    elif req.skip_verification and ver_status != "PASS":
+        logger.warning(
+            f"⚠️ [Robot Execution] Verification check bypassed for '{req.file_name}' (status='{ver_status or 'UNVERIFIED'}'). "
+            "Executing trajectory directly as requested."
+        )
 
     # 筛选待执行的路径
     target_paths = []
@@ -916,11 +964,17 @@ def execute_yaml_path(name: str, req: ExecuteYamlPathRequest):
 
         for p_idx, path in enumerate(target_paths):
             pts = path.get("points", [])
+            # 奇异自适应降速 (与 motion_cli 同源 spraying.singularity_speed_scaling): 开启时读取
+            # 本路径逐航点速度剖面, 按 path_id 对齐; 关闭时 scale_map=None 完全不改变速度
+            scale_map = (
+                _singularity_speed_scales(verification, path.get("path_id"))
+                if sprayer_config.singularity_speed_scaling else None
+            )
             valid_items = []
-            for pt in pts:
+            for wp_i, pt in enumerate(pts):
                 tcp = pt.get("tcp_pose_base")
                 if tcp:
-                    valid_items.append({
+                    item = {
                         "pose": {
                             "x": float(tcp.get("x", 0.0)),
                             "y": float(tcp.get("y", 0.0)),
@@ -931,7 +985,11 @@ def execute_yaml_path(name: str, req: ExecuteYamlPathRequest):
                             "is_radians": False, # YAML 中姿态角度为 deg
                         },
                         "spraying": _is_point_spraying(pt),
-                    })
+                    }
+                    # 逐航点建议速度 = 用户选定线速度上限 speed_l × 奇异缩放比例 (只降不升)
+                    if scale_map is not None and wp_i < len(scale_map):
+                        item["speed"] = round(speed_l * scale_map[wp_i], 1)
+                    valid_items.append(item)
             if not valid_items:
                 continue
 

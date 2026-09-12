@@ -186,6 +186,12 @@ void EmitVerification(YAML::Emitter& e, const VerifyReport& v) {
     e << YAML::Key << "trajectory_tcp" << YAML::Value << YAML::BeginSeq;
     for (const auto& t : pr.trajectory_tcp) EmitFixedSeq(e, t.data(), 6, 2);
     e << YAML::EndSeq;
+    // ⑤-A 逐航点建议线速度剖面（仅开启奇异缩放时非空），供执行侧逐段设 TCPSpeed。
+    if (!pr.waypoint_speed_mm_s.empty()) {
+      e << YAML::Key << "waypoint_speed_mm_s" << YAML::Value << YAML::Flow << YAML::BeginSeq;
+      for (double v : pr.waypoint_speed_mm_s) e << Fixed(v, 1);
+      e << YAML::EndSeq;
+    }
     e << YAML::EndMap;
   }
   e << YAML::EndSeq;
@@ -360,6 +366,23 @@ bool LoadSprayingConfig(const std::string& yaml_path, SprayingConfig& out, std::
         out.tol_ladder_stop_peak_ratio = spraying["tol_ladder_stop_peak_ratio"].as<double>();
       if (spraying["tol_ladder_max_pointing_deg"])
         out.tol_ladder_max_pointing_deg = spraying["tol_ladder_max_pointing_deg"].as<double>();
+      // ⑤ 边内关节速度约束：让 DP 选边时就按段时长折算真实 °/s，超速边加罚/硬禁。
+      // 与 tol_ladder 一样放配置里，部署侧可不重编调整；CLI 显式传参优先级更高。
+      if (spraying["opt_enforce_vel_limit"])
+        out.opt_enforce_vel_limit = spraying["opt_enforce_vel_limit"].as<bool>();
+      if (spraying["opt_vel_soft_ratio"])
+        out.opt_vel_soft_ratio = spraying["opt_vel_soft_ratio"].as<double>();
+      if (spraying["opt_vel_cost_weight"])
+        out.opt_vel_cost_weight = spraying["opt_vel_cost_weight"].as<double>();
+      if (spraying["opt_vel_hard_ratio"])
+        out.opt_vel_hard_ratio = spraying["opt_vel_hard_ratio"].as<double>();
+      // ⑤-A 腕部奇异自适应降速：按 |sin(J5)| 在近奇异段压低线速度，兼顾贴法向与不超速。
+      if (spraying["singularity_speed_scaling"])
+        out.singularity_scaling = spraying["singularity_speed_scaling"].as<bool>();
+      if (spraying["singularity_ref_deg"])
+        out.singularity_ref_deg = spraying["singularity_ref_deg"].as<double>();
+      if (spraying["singularity_min_scale"])
+        out.singularity_min_scale = spraying["singularity_min_scale"].as<double>();
     }
     out.urdf_path = ResolveRel(out.urdf_path, yaml_path);
     return true;

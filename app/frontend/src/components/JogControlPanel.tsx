@@ -535,7 +535,7 @@ const JogControlPanel: React.FC<JogControlPanelProps> = ({ robotState }) => {
           <button
             onClick={handleFold}
             disabled={disableMotion}
-            title="Fold robot to [0, 0, -156°, 0, 0, 0]"
+            title="Move robot to configured Fold position"
             className={`px-1.5 h-7 text-[11px] whitespace-nowrap rounded-md flex items-center justify-center gap-1 shrink-0 transition-colors border ${activeAction === 'fold'
                 ? 'bg-purple-600/20 text-purple-400 border-purple-500/50 animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.5)] cursor-not-allowed'
                 : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border-slate-700/50 disabled:opacity-50 disabled:cursor-not-allowed'

@@ -167,4 +167,17 @@ inline std::vector<double> ExpandAxisGrid(const AxisGrid& g) {
   return out;
 }
 
+// 腕部奇异速度回退（Nakamura 奇异性鲁棒逆解的离散简化）：以 |sin(J5)| 作腕部可操作度代理。
+// J5→0 时 J4/J6 轴趋于共线（腕部奇异），小笛卡尔旋转被放大成大关节角速度；这里越接近
+// 奇异越压低笛卡尔线速度，使折算关节角速度不超限（保持枪尖贴法向，仅该段节拍变长）。
+// 返回 ∈ [floor_ratio, 1]：|J5|≥ref_rad 时不减速(=1)，趋 0 时降到 floor_ratio。量纲：rad。
+inline double SingularitySpeedScale(double q5_rad, double ref_rad, double floor_ratio) {
+  const double r = std::sin(ref_rad);
+  if (r <= 0.0) return 1.0;
+  double k = std::abs(std::sin(q5_rad)) / r;
+  if (k > 1.0) k = 1.0;
+  if (k < floor_ratio) k = floor_ratio;
+  return k;
+}
+
 }  // namespace motion

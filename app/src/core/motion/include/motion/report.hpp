@@ -32,6 +32,10 @@ struct PathVerifyReport {
   std::vector<Issue> issues;
   std::vector<JointVec> trajectory_q;
   std::vector<std::array<double, 6>> trajectory_tcp;  // x,y,z mm + rx,ry,rz deg
+  // ⑤-A 奇异自适应降速剖面：逐输入航点的建议笛卡尔线速度 (mm/s)。
+  // 仅在开启奇异缩放时填充；非奇异航点 = nominal speed，近奇异航点按 |sin(J5)| 压低。
+  // 执行侧按此逐段设 TCPSpeed（成对括住队列以保 CP 连续）。
+  std::vector<double> waypoint_speed_mm_s;
 };
 
 struct VerifySummary {
@@ -57,6 +61,11 @@ struct VerifyReport {
 struct VerifyOptions {
   double step_mm = 1.5;
   double speed_mm_s = 120.0;
+  // ⑤-A 腕部奇异自适应降速：按 |sin(J5)| 在近奇异段压低线速度后再折算关节角速度判超速。
+  // 默认关（=旧行为，不影响现有回归）；开启后校验器与 ⑤ 采用同一缩放模型，口径一致。
+  bool singularity_scaling = false;
+  double singularity_ref_deg = 25.0;   // |J5| ≥ 此值(deg) 不减速（可操作度充分）
+  double singularity_min_scale = 0.2;  // 减速下限：最多降到该比例的名义线速度
 };
 
 // 容差阶梯中的一档：一次完整 DP + 密集校验的结果摘要。
@@ -82,12 +91,32 @@ struct OptimizeOptions {
   int movel_checks_min = 10;
   int movel_checks_max = 100;
   double movel_spacing_mm = 5.0;
-  // 候选姿态相对**该航点名义(法向)姿态**的偏离惩罚权重（Rx/Ry 为倾角、Rz 为绕枪轴自旋），
-  // 不是「离机械臂零位的远近」；自旋权重刻意压到 0.01，因为圆喷嘴绕轴自旋不影响漆雾。
-  Eigen::Vector3d weight_zero_dev{1.0, 1.0, 0.01};
+  // 候选姿态的第一质量指标是相对名义工具 Z 轴的夹角。自旋不改变圆喷嘴的
+  // 指向，但仍作为同等法向候选之间的轻微稳定性偏好。
+  // raw 模式会先单独验证零偏差链；只有该链不可行时，才与关节平滑代价共同
+  // 选择包络内的修复姿态。
+  double pointing_cost_weight = 1.0;
+  double spin_cost_weight = 0.01;
   JointVec joint_weights = (JointVec() << 1.0, 1.2, 1.0, 0.8, 0.8, 0.5).finished();
   // 密集 MoveL 复核开关；采样步长/速度由传入的 ChainVerifier 自带 VerifyOptions 决定。
   bool dense_verify = true;
+
+  // ── 边内关节速度约束（⑤ 根治真·喷涂超速）─────────────────────────────────
+  // 旧 DP 代价 J = Σ weights·Δq² 只看「相邻航点关节位移大小」，**完全不含 dt**；
+  // 校验器却按 MoveL 线速度算 dt 判 °/s。于是 DP 眼里「Δq 很小」的一条边，落到固定
+  // 线速度执行时照样能顶出超速（实测 raw 下 J4 持续 ~200–250°/s）。这里让 DP 在选边时
+  // 就按段时长 dt_seg = 段长/线速度 折算真实角速度，超速边加罚/硬禁，从搜索阶段规避。
+  double exec_speed_mm_s = 150.0;  // 与校验器同一线速度 (mm/s)，保证 DP 与终校口径一致
+  bool enforce_vel_limit = true;   // false = 退化为旧行为（纯 Δq²，无速度约束）
+  double vel_soft_ratio = 0.9;     // 关节角速度 ≤ 该比例 × 限速 的边不加罚（留 10% 余量）
+  double vel_cost_weight = 40.0;   // 超软阈惩罚权重：cost += Σ (ratio - soft)² × 此值
+  double vel_hard_ratio = 1.15;    // 超该比例 × 限速 的边直接判不可行（0 = 不硬禁，仅加罚）
+
+  // ⑤-A 腕部奇异自适应降速：必须与传入 ChainVerifier 的 VerifyOptions 取同名同值，
+  // 否则 DP 判不可行的边与终校按降速后判可行的边不一致。缩放模型见 SingularitySpeedScale。
+  bool singularity_scaling = false;
+  double singularity_ref_deg = 25.0;
+  double singularity_min_scale = 0.2;
 
   // ── 容差阶梯择优（Monotonicity Guard）──────────────────────────────────────
   // 大容差包络在几何上包含小容差包络，理论上最优解不应变差；但 DP 的目标

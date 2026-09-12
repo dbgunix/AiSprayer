@@ -80,6 +80,14 @@ def validate_setting_entry(key: str, value: Any) -> Any:
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail=f"Setting '{key}' contains non-numeric vector elements.")
 
+    elif expected_type == "vector6":
+        if not isinstance(value, (list, tuple)) or len(value) != 6:
+            raise HTTPException(status_code=400, detail=f"Setting '{key}' must be a 6-element list [J1, J2, J3, J4, J5, J6].")
+        try:
+            return [float(v) for v in value]
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail=f"Setting '{key}' contains non-numeric vector elements.")
+
     elif expected_type == "tags":
         if isinstance(value, str):
             return [t.strip() for t in value.split(",") if t.strip()]
@@ -142,7 +150,7 @@ def update_config(req: SettingsUpdate):
 
     # Hot-sync RobotService
     robot_service.reload_config()
-    if robot_speed_updated and robot_service.is_connected:
+    if robot_speed_updated and robot_service.is_connected():
         try:
             robot_service.set_global_speed_factor(sprayer_config.global_speed_factor)
         except Exception as e:
@@ -178,7 +186,7 @@ def reset_config(req: ResetSettingsReq):
 
     # Hot-sync RobotService
     robot_service.reload_config()
-    if robot_service.is_connected:
+    if robot_service.is_connected():
         try:
             robot_service.set_global_speed_factor(sprayer_config.global_speed_factor)
         except Exception as e:

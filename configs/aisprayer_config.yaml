@@ -39,6 +39,10 @@ hardware:
     robot_tcp_id: 1             # 机械臂末端工具坐标系ID: 默认 0 (法兰/工具0), 配置为 1 则是 gripper_tip_link (夹爪), 2 是 laser_head_link (激光头)
     robot_tcp: "gripper_tip_link"  # 对应的 URDF TCP 节点名称 (laser_head_link / gripper_tip_link)
     spray_do_index: 1           # 喷涂开关 DO 端子编号 (1-16, 默认 1; 预留后续扩展 purge_do_index 清洗, blow_do_index 吹气等)
+    home_position: [180.0, 0.0, 90.0, 90.0, 90.0, 0.0]  # 机械臂原点/复位关节角 (单位: 度, [J1, J2, J3, J4, J5, J6])
+    fold_position: [186.0, 0.0, 159.0, 18.0, 176.0, 0.0]  # 机械臂折叠/收纳关节角 (单位: 度, [J1, J2, J3, J4, J5, J6])
+    #home_position: [0.0, 0.0, -90.0, -90.0, -90.0, 0.0]  # 机械臂原点/复位关节角 (单位: 度, [J1, J2, J3, J4, J5, J6])
+    #fold_position: [0.0, 0.0, -156.0, 0.0, -170.0, 0.0]  # 机械臂折叠/收纳关节角 (单位: 度, [J1, J2, J3, J4, J5, J6])
 
 # 2. 标定算法配置 (Calibration)
 calib:
@@ -71,9 +75,9 @@ spraying:
   calib_path: "configs/calib/calibration_result.yaml"
   model_path: "models/wissight.pt"
   spray_dist_mm: 150          # 默认喷涂靶距 / TCP standoff 距离 (mm)
-  spray_width_mm: 50.0         # 喷涂幅宽 (mm)
+  spray_width_mm: 60.0         # 喷涂幅宽 (mm)
   overlap_rate: 0.2             # 喷幅重叠率 (0~1.0)
-  point_spacing_mm: 100.0        # 沿行点间距 (mm)
+  point_spacing_mm: 20.0        # 沿行点间距 (mm)
   velocity: 150.0               # 喷涂移动速度 (mm/s)
   slerp_step_mm: 2.0            # 仿真与运动学验证插值步长 (mm)
 
@@ -82,19 +86,22 @@ spraying:
   #   home   = 用 Home 关节角 [0,0,-90,-90,-90,0] 正解出的 TCP 姿态作为锚点
   #   raw    = 逐点以航点自身的名义(法向)姿态为锚点, 即"每个点在自己法向 ±容差内选姿态"(最严格的法向跟随)
   # 页面/接口显式传入 poi_config.anchor_source 时以传入值为准; live(机械臂当前 TCP)由后端接口解析成具体 ref_rpy 后下发
-  poi_anchor_source: "config"
+  poi_anchor_source: "raw"
   # 锚点参考姿态 [Rx, Ry, Rz] (单位: 度, Euler 'xyz'), 仅 poi_anchor_source: config 时生效
   poi_ref_rpy_deg: [90.0, 0.0, 90.0]
 
   # POI 锚点姿态容差包络 [Rx, Ry, Rz] (单位: ±度, 页面默认值)
   # Rz 收到 ±30 是为禁止绕喷枪轴自由自旋: 之前 ±180 时自旋几乎只由 DP 平滑项决定,
   # 会翻到欧拉角另一侧并连带换 IK 分支(Δq_max 达 170°), 直接顶出 J6 超速
-  poi_tolerance_rpy_deg: [30.0, 30.0, 180.0]
+  # poi_tolerance_rpy_deg: [30.0, 30.0, 180.0] # for config
+  poi_tolerance_rpy_deg: [10.0, 10.0, 180.0] # for raw
 
   # 轨迹优化器候选姿态搜索网格 [min, max, step] (单位: 度)
   # 候选姿态 = 名义(法向)姿态 × 本网格, 再裁剪进上面的锚点包络; 网格范围应不小于包络
-  grid_tol_x_deg: [-5.0, 5.0, 2.0]       # 绕工具 X 轴倾斜容差与采样步长
-  grid_tol_y_deg: [-5.0, 5.0, 2.0]       # 绕工具 Y 轴倾斜容差与采样步长
+  # x/y 用 ±15 (> ±10 包络): 网格若窄于包络, DP 搜到的是被截断的子集, 够不到能避开
+  # 肘部奇异(|J3|->0)的姿态, 会残留 ELBOW_SINGULARITY 告警; 放宽后指向偏量不变(见扫描)
+  grid_tol_x_deg: [-15.0, 15.0, 2.0]     # 绕工具 X 轴倾斜容差与采样步长
+  grid_tol_y_deg: [-15.0, 15.0, 2.0]     # 绕工具 Y 轴倾斜容差与采样步长
   grid_tol_z_deg: [-30.0, 30.0, 5.0]     # 绕工具 Z 轴自旋容差与采样步长
 
   # 容差阶梯择优 (Monotonicity Guard)：大容差包络几何上包含小容差, 但 DP 目标 J=ΣΔq²+姿态偏置
@@ -109,6 +116,15 @@ spraying:
   # 指向偏量护栏：收紧包络会用“喷嘴偏离表面法向”换“更低峰值”(实测 18.7°→45.9°)。
   # >0 时, 某档最大指向偏量 > 请求档 + 此值就弃用该档 (宁可峰值高也不牺牲涂层质量); 0=不限制
   tol_ladder_max_pointing_deg: 0.0
+
+  # ⑤-A 腕部奇异(|J5|→0)自适应降速总开关 (motion_cli 与执行侧同源读此键):
+  #   true  = 优化器/校验器按 |sin(J5)| 可操作度在近奇异段缩放 dt, 并把逐航点建议速度剖面
+  #           (verification.path_reports[].waypoint_speed_mm_s) 落盘; 执行侧读取该剖面真实压低
+  #           近奇异航点的 TCP 线速度 (eff = speed_l × 剖面/nominal, 只降不升, 队列内覆写 TCPSpeed 不阻断 CP)。
+  #   false = 模型与真机速度均不改变 (零回归)。
+  singularity_speed_scaling: true
+  singularity_ref_deg: 25.0    # |J5| ≥ 此角度(deg) 视为远离奇异, 不减速; 越接近 0 减速越多
+  singularity_min_scale: 0.2   # 减速下限比例 (近奇异段最多降到名义速度的 20%)
 
 # 4. 工位跟随 (Follow) —— 特征前端 + 配准 + 判据 + 臂侧镜像
 # 这一份 `follow:` 块有两个读者，跑的是同一套数学：

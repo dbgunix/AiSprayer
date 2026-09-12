@@ -14,9 +14,10 @@ import {
   X,
   RefreshCw,
   Sparkles,
-  Info
+  Info,
+  LocateFixed
 } from 'lucide-react';
-import { API_BASE } from '../config';
+import { API_BASE, WS_BASE } from '../config';
 
 interface ConfigOption {
   value: any;
@@ -27,7 +28,7 @@ interface ConfigItemMeta {
   key: string;
   category: 'robot' | 'calib' | 'spraying' | 'interactive';
   label: string;
-  type: 'string' | 'number' | 'boolean' | 'select' | 'vector3' | 'tags';
+  type: 'string' | 'number' | 'boolean' | 'select' | 'vector3' | 'vector6' | 'tags';
   value: any;
   yaml_default: any;
   is_overridden: boolean;
@@ -91,6 +92,8 @@ const CATEGORIES: CategoryMeta[] = [
 // Wide items that need to span 2 columns inside a card
 const WIDE_KEYS = new Set([
   'robot.robot_urdf',
+  'robot.home_position',
+  'robot.fold_position',
   'spraying.poi_ref_rpy_deg',
   'spraying.poi_tolerance_rpy_deg',
   'interactive.detector.classes',
@@ -110,6 +113,87 @@ const ConfigView: React.FC = () => {
     target?: string;
     targetName?: string;
   }>({ isOpen: false, type: 'all' });
+  const [robotConnected, setRobotConnected] = useState(false);
+  const [capturingKey, setCapturingKey] = useState<string | null>(null);
+
+  // Monitor live robot connection state via WebSocket and state polling
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let isMounted = true;
+
+    const queryRobotStatus = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/robot/state`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) setRobotConnected(Boolean(data.connected));
+        }
+      } catch {
+        if (isMounted) setRobotConnected(false);
+      }
+    };
+
+    queryRobotStatus();
+
+    try {
+      ws = new WebSocket(`${WS_BASE}/api/robot/ws`);
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'robot_state' && payload.data) {
+            if (isMounted) setRobotConnected(Boolean(payload.data.connected));
+          }
+        } catch {
+          // ignore parsing error
+        }
+      };
+      ws.onerror = () => {
+        if (isMounted) queryRobotStatus();
+      };
+      ws.onclose = () => {
+        if (isMounted) queryRobotStatus();
+      };
+    } catch {
+      // ignore ws setup error
+    }
+
+    const interval = setInterval(queryRobotStatus, 3000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      if (ws) ws.close();
+    };
+  }, []);
+
+  // Capture live robot joint angles from the connected robot
+  const handleCaptureCurrentPosition = async (itemKey: string, label: string) => {
+    if (!robotConnected) {
+      showNotification('error', 'Robot must be connected to capture current position.');
+      return;
+    }
+    try {
+      setCapturingKey(itemKey);
+      const res = await fetch(`${API_BASE}/api/robot/joints`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const joints = data.joints;
+      if (Array.isArray(joints) && joints.length === 6) {
+        handleFieldChange(itemKey, joints);
+        showNotification('success', `Captured live robot joints for ${label}: [${joints.join(', ')}]°`);
+      } else {
+        throw new Error('Invalid joint coordinates received from robot.');
+      }
+    } catch (err: any) {
+      console.error('Failed to capture robot position:', err);
+      showNotification('error', `Failed to get current position: ${err.message || err}`);
+    } finally {
+      setCapturingKey(null);
+    }
+  };
 
   // Load config metadata from API
   const fetchConfig = async () => {
@@ -267,8 +351,8 @@ const ConfigView: React.FC = () => {
     if (val === null || val === undefined) return 'None';
     if (typeof val === 'boolean') return val ? 'true' : 'false';
     if (Array.isArray(val)) {
-      if (val.length <= 3) return `[${val.join(',')}]`;
-      return `[${val.slice(0, 2).join(',')},...]`;
+      if (val.length <= 6) return `[${val.join(',')}]`;
+      return `[${val.slice(0, 3).join(',')},...]`;
     }
     const str = String(val);
     return str.length > 18 ? str.slice(0, 15) + '...' : str;
@@ -347,6 +431,62 @@ const ConfigView: React.FC = () => {
                 />
               </div>
             ))}
+          </div>
+        );
+      }
+
+      case 'vector6': {
+        const arr = Array.isArray(val) && val.length === 6 ? val : [0, 0, 0, 0, 0, 0];
+        const labels = ['J1', 'J2', 'J3', 'J4', 'J5', 'J6'];
+        const isCapturing = capturingKey === item.key;
+        return (
+          <div className="space-y-2">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+              {labels.map((joint, i) => (
+                <div key={joint} className="relative">
+                  <span className="absolute left-2 top-1 text-[10px] font-mono text-slate-500 font-bold uppercase">
+                    {joint}
+                  </span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={arr[i] ?? 0}
+                    onChange={(e) => {
+                      const newArr = [...arr];
+                      newArr[i] = parseFloat(e.target.value) || 0;
+                      handleFieldChange(item.key, newArr);
+                    }}
+                    className="w-full bg-slate-900/90 border border-slate-700/80 rounded-md pl-7 pr-1.5 py-1 text-xs text-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between pt-0.5">
+              <span className="text-[10px] font-mono text-slate-500">
+                Unit: degrees (°)
+              </span>
+              <button
+                type="button"
+                disabled={!robotConnected || isCapturing}
+                onClick={() => handleCaptureCurrentPosition(item.key, item.label)}
+                title={
+                  robotConnected
+                    ? 'Capture live joint positions from connected robot'
+                    : 'Robot must be connected to read current position'
+                }
+                className={`px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1.5 transition-all border ${
+                  robotConnected
+                    ? 'bg-blue-600/15 hover:bg-blue-600/25 text-blue-300 border-blue-500/30 hover:border-blue-500/50 cursor-pointer shadow-xs'
+                    : 'bg-slate-900/50 text-slate-600 border-slate-800 cursor-not-allowed opacity-60'
+                }`}
+              >
+                <LocateFixed size={12} className={isCapturing ? 'animate-spin text-blue-400' : ''} />
+                <span>{isCapturing ? 'Capturing...' : 'Get Current Position'}</span>
+                {robotConnected && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                )}
+              </button>
+            </div>
           </div>
         );
       }

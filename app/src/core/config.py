@@ -14,10 +14,14 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..
 _LEGACY_KEY_ALIASES: Dict[str, List[str]] = {
     "robot.ip": ["robot_ip"],
     "robot.port": ["robot_port"],
+    "robot.home_position": ["robot_home_position"],
+    "robot.fold_position": ["robot_fold_position"],
     "calib.board.cols": ["calib_board_cols"],
     "calib.board.rows": ["calib_board_rows"],
     "robot_ip": ["robot.ip"],
     "robot_port": ["robot.port"],
+    "robot_home_position": ["robot.home_position"],
+    "robot_fold_position": ["robot.fold_position"],
     "calib_board_cols": ["calib.board.cols"],
     "calib_board_rows": ["calib.board.rows"],
 }
@@ -106,6 +110,26 @@ CONFIG_REGISTRY: List[Dict[str, Any]] = [
         "yaml_path": "hardware.robot.robot_urdf",
         "default": "app/urdf/cr5_robot_with_my_tools.urdf",
         "description": "Relative or absolute path to robot kinematic URDF model.",
+    },
+    {
+        "key": "robot.home_position",
+        "category": "robot",
+        "label": "Robot Home Position (deg)",
+        "type": "vector6",
+        "yaml_path": "hardware.robot.home_position",
+        "default": [0.0, 0.0, -90.0, -90.0, -90.0, 0.0],
+        "description": "Robot homing / reset joint angles in degrees [J1, J2, J3, J4, J5, J6].",
+        "legacy_key": "robot_home_position",
+    },
+    {
+        "key": "robot.fold_position",
+        "category": "robot",
+        "label": "Robot Fold Position (deg)",
+        "type": "vector6",
+        "yaml_path": "hardware.robot.fold_position",
+        "default": [0.0, 0.0, -156.0, 0.0, -170.0, 0.0],
+        "description": "Robot folded / storage joint angles in degrees [J1, J2, J3, J4, J5, J6].",
+        "legacy_key": "robot_fold_position",
     },
 
     # ─── 2. 标定参数与标定板 (Calibration Target & Mount) ────────────────────
@@ -286,6 +310,15 @@ CONFIG_REGISTRY: List[Dict[str, Any]] = [
         "max": 1.0,
         "step": 0.05,
         "description": "Stop ladder tightening when joint velocity peak ratio drops below this threshold.",
+    },
+    {
+        "key": "spraying.singularity_speed_scaling",
+        "category": "spraying",
+        "label": "Wrist Singularity Auto Speed Scaling",
+        "type": "boolean",
+        "yaml_path": "spraying.singularity_speed_scaling",
+        "default": False,
+        "description": "Master switch for wrist-singularity (|J5|->0) auto slowdown. True: optimizer/verifier scale dt by manipulability AND the executor really lowers TCP speed near singularity using the per-waypoint profile; False: speed unchanged (both model & hardware).",
     },
 
     # ─── 4. 视觉识别与交互式分割 (Vision & Interactive SAM) ─────────────────
@@ -732,6 +765,34 @@ class SprayerConfig:
         return 1
 
     @property
+    def home_position(self) -> List[float]:
+        """
+        机械臂原点/复位关节角 (单位: 度, [J1, J2, J3, J4, J5, J6])。
+        优先从数据库读取，其次从 aisprayer_config.yaml 中读取，最后保底默认值。
+        """
+        val = self.get_cascading("robot.home_position", "hardware.robot.home_position", [0.0, 0.0, -90.0, -90.0, -90.0, 0.0])
+        if isinstance(val, (list, tuple)) and len(val) == 6:
+            try:
+                return [float(x) for x in val]
+            except (ValueError, TypeError):
+                pass
+        return [0.0, 0.0, -90.0, -90.0, -90.0, 0.0]
+
+    @property
+    def fold_position(self) -> List[float]:
+        """
+        机械臂折叠/收纳关节角 (单位: 度, [J1, J2, J3, J4, J5, J6])。
+        优先从数据库读取，其次从 aisprayer_config.yaml 中读取，最后保底默认值。
+        """
+        val = self.get_cascading("robot.fold_position", "hardware.robot.fold_position", [0.0, 0.0, -156.0, 0.0, -170.0, 0.0])
+        if isinstance(val, (list, tuple)) and len(val) == 6:
+            try:
+                return [float(x) for x in val]
+            except (ValueError, TypeError):
+                pass
+        return [0.0, 0.0, -156.0, 0.0, -170.0, 0.0]
+
+    @property
     def calib_mount(self) -> str:
         """新建标定会话默认相机安装方式: 'eye-to-hand' 或 'eye-in-hand'"""
         val = str(self.get_cascading("calib.mount", "calib.mount", "eye-to-hand")).strip().lower()
@@ -822,6 +883,15 @@ class SprayerConfig:
     def tol_ladder_stop_peak_ratio(self) -> float:
         """容差阶梯早停阈值比例"""
         return float(self.get_cascading("spraying.tol_ladder_stop_peak_ratio", "spraying.tol_ladder_stop_peak_ratio", 0.3))
+
+    @property
+    def singularity_speed_scaling(self) -> bool:
+        """
+        腕部奇异(|J5|->0)自适应降速总开关 (与 motion_cli 侧 spraying.singularity_speed_scaling 同源)。
+        True: 优化器/校验器按可操作度缩放 dt, 且执行侧按 poi yaml 的逐航点剖面真实压低 TCP 线速度;
+        False: 模型与真机均不改变速度 (零回归, 默认关, 待真机 dry-run 验证后再开)。
+        """
+        return bool(self.get_cascading("spraying.singularity_speed_scaling", "spraying.singularity_speed_scaling", False))
 
     @property
     def grid_tol_x_deg(self) -> Tuple[float, float, float]:

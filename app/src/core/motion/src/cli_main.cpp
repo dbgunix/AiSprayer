@@ -83,6 +83,12 @@ int main(int argc, char** argv) {
   std::string ladder_scales = "0.5,0.333333,0.25";
   double ladder_stop_ratio = 0.3;
   double ladder_max_pointing = 0.0;
+  // ⑤ 边内关节速度约束（默认开）：CLI 显式传参 > 配置文件 > 默认值。
+  bool no_opt_vel_limit = false;
+  double opt_vel_soft_ratio = 0.9, opt_vel_cost_weight = 40.0, opt_vel_hard_ratio = 1.15;
+  // ⑤-A 腕部奇异自适应降速（默认取配置，CLI 显式传参优先）。
+  bool singularity_on = false;
+  double sing_ref_deg = 25.0, sing_min_scale = 0.2;
   std::string state_type = "auto_poi";
 
   auto* optimize = app.add_subcommand("optimize", "Viterbi optimize scan.auto.path.yaml → poi");
@@ -111,6 +117,20 @@ int main(int argc, char** argv) {
                        "早停阈值：某档 PASS 且 峰值/限速 ≤ 此值时不再继续收紧（0=跑完全部）");
   optimize->add_option("--tol-ladder-max-pointing-deg", ladder_max_pointing,
                        "指向偏量护栏：某档最大指向偏量 > 请求档 + 此值就弃用该档（0=不限制）");
+  optimize->add_flag("--no-opt-vel-limit", no_opt_vel_limit,
+                     "关闭边内关节速度约束（退化为纯 Δq² 代价，即旧行为）");
+  optimize->add_option("--opt-vel-soft-ratio", opt_vel_soft_ratio,
+                       "软罚阈值：角速度 > 此比例×限速 的边加二次惩罚（留余量）");
+  optimize->add_option("--opt-vel-cost-weight", opt_vel_cost_weight,
+                       "超软阈惩罚权重：cost += Σ(ratio-soft)²×此值");
+  optimize->add_option("--opt-vel-hard-ratio", opt_vel_hard_ratio,
+                       "硬禁阈值：角速度 > 此比例×限速 的边直接判不可行（0=只加罚不硬禁）");
+  optimize->add_flag("--singularity-scaling", singularity_on,
+                     "开启腕部奇异自适应降速（|J5|→0 段按可操作度压低线速度）");
+  optimize->add_option("--singularity-ref-deg", sing_ref_deg,
+                       "|J5| ≥ 此角度不减速（deg，默认 25）");
+  optimize->add_option("--singularity-min-scale", sing_min_scale,
+                       "减速下限比例（0~1，最多降到该倍名义线速度，默认 0.2）");
 
   std::string joints = "0,0,-90,-90,-90,0";
   std::string pose;
@@ -190,13 +210,19 @@ int main(int argc, char** argv) {
       motion::VerifyOptions opt;
       opt.step_mm = step;
       opt.speed_mm_s = speed;
+      // verify 子命令与配置同口径的奇异降速（无专设 CLI 开关，直接取 --config 生效值）。
+      opt.singularity_scaling = eff.singularity_scaling;
+      opt.singularity_ref_deg = eff.singularity_ref_deg;
+      opt.singularity_min_scale = eff.singularity_min_scale;
       motion::ChainVerifier v(kin, model.tool, opt);
       std::optional<motion::JointVec> seed;
-      const auto seed_vals = SplitCsv(seed_deg);
-      if (seed_vals.size() == 6) {
-        motion::JointVec q;
-        for (int i = 0; i < 6; ++i) q[i] = motion::Rad(seed_vals[i]);
-        seed = q;
+      if (verify->count("--seed") > 0) {
+        const auto seed_vals = SplitCsv(seed_deg);
+        if (seed_vals.size() == 6) {
+          motion::JointVec q;
+          for (int i = 0; i < 6; ++i) q[i] = motion::Rad(seed_vals[i]);
+          seed = q;
+        }
       }
       const auto t0 = std::chrono::steady_clock::now();
       const motion::VerifyReport report = v.VerifyAll(doc.paths, seed);
@@ -247,11 +273,32 @@ int main(int argc, char** argv) {
       oopt.tol_ladder_max_pointing_deg = given_opt("--tol-ladder-max-pointing-deg")
                                              ? ladder_max_pointing
                                              : eff.tol_ladder_max_pointing_deg;
+      // ⑤ 边内速度约束：执行线速度与校验器同源（speed），保证 DP 选边与终校 °/s 口径一致。
+      oopt.exec_speed_mm_s = speed;
+      oopt.enforce_vel_limit =
+          given_opt("--no-opt-vel-limit") ? !no_opt_vel_limit : eff.opt_enforce_vel_limit;
+      oopt.vel_soft_ratio =
+          given_opt("--opt-vel-soft-ratio") ? opt_vel_soft_ratio : eff.opt_vel_soft_ratio;
+      oopt.vel_cost_weight =
+          given_opt("--opt-vel-cost-weight") ? opt_vel_cost_weight : eff.opt_vel_cost_weight;
+      oopt.vel_hard_ratio =
+          given_opt("--opt-vel-hard-ratio") ? opt_vel_hard_ratio : eff.opt_vel_hard_ratio;
+      // ⑤-A 奇异降速：DP 选边(⑤)与终校共用同一缩放模型，两边必须同值。
+      oopt.singularity_scaling =
+          given_opt("--singularity-scaling") ? singularity_on : eff.singularity_scaling;
+      oopt.singularity_ref_deg =
+          given_opt("--singularity-ref-deg") ? sing_ref_deg : eff.singularity_ref_deg;
+      oopt.singularity_min_scale =
+          given_opt("--singularity-min-scale") ? sing_min_scale : eff.singularity_min_scale;
       if (auto e = oopt.Validate(); !e.empty()) return EmitError(2, "optimize", e);
 
       motion::VerifyOptions vopt;
       vopt.step_mm = step;
       vopt.speed_mm_s = speed;
+      // 终校器与 DP 采用完全相同的奇异缩放，否则“DP 选出的可行解”与“终校判超速”口径不一致。
+      vopt.singularity_scaling = oopt.singularity_scaling;
+      vopt.singularity_ref_deg = oopt.singularity_ref_deg;
+      vopt.singularity_min_scale = oopt.singularity_min_scale;
       motion::ChainVerifier verifier(kin, model.tool, vopt);
       motion::ViterbiOptimizer optimizer(kin, model.tool, oopt, &verifier);
 
@@ -297,7 +344,9 @@ int main(int argc, char** argv) {
       const Eigen::Vector3d adopted_tol =
           last.adopted_tol_deg.maxCoeff() > 0.0 ? last.adopted_tol_deg : spec.tol_deg;
       const bool ladder_applied = (adopted_tol - spec.tol_deg).cwiseAbs().maxCoeff() > 1e-9;
-      auto all = verifier.VerifyAll(out_doc.paths);
+      const std::optional<motion::JointVec> opt_seed =
+          last.joints_rad.empty() ? std::nullopt : std::make_optional(last.joints_rad[0]);
+      auto all = verifier.VerifyAll(out_doc.paths, opt_seed);
       if (!output.empty()) {
         motion::PoiConfig poi;
         poi.anchor_source = anchor_source;

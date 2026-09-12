@@ -86,6 +86,32 @@ def robot_home(req: HomeReq):
     return {"status": "ok"}
 
 
+@robot_router.get("/state")
+def get_robot_state():
+    """Query current robot connection status, running status, live pose, and joint angles"""
+    is_conn = robot_service.is_connected()
+    joints, _ = robot_service.get_current_joint() if is_conn else (None, "")
+    pose, _ = robot_service.get_current_pose() if is_conn else (None, "")
+    return {
+        "connected": is_conn,
+        "is_moving": robot_service.is_moving() if is_conn else False,
+        "running_status": robot_service.get_running_state() if is_conn else 0,
+        "joints": [round(float(j), 2) for j in joints] if joints else None,
+        "pose": [round(float(p), 2) for p in pose] if pose else None,
+    }
+
+
+@robot_router.get("/joints")
+def get_robot_joints():
+    """Query current robot joint positions in degrees (requires connected robot)"""
+    if not robot_service.is_connected():
+        raise HTTPException(status_code=400, detail="Robot is not connected")
+    joints, err = robot_service.get_current_joint()
+    if joints is None:
+        raise HTTPException(status_code=500, detail=f"Failed to read robot joints: {err}")
+    return {"status": "ok", "joints": [round(float(j), 2) for j in joints]}
+
+
 @robot_router.get("/speed")
 def get_robot_speed():
     speed_l, acc_l, speed_j, acc_j = robot_service.get_speed()

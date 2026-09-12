@@ -263,7 +263,8 @@ class BaseRobotDriver(ABC):
         dec: float = 80.0,
         tool_num: int = 0,
         wait: bool = True,
-        cp_ratio: int = 50
+        cp_ratio: int = 50,
+        speeds: Optional[List[float]] = None
     ) -> int:
         """
         队列形式的直线运动(MOVL)，用于多点连续平滑移动。
@@ -274,6 +275,7 @@ class BaseRobotDriver(ABC):
         :param tool_num: 工具号
         :param wait: 是否等待整个队列运动完成
         :param cp_ratio: 连续路径平滑过渡比例(1-100)，0表示关闭平滑
+        :param speeds: 逐航点目标线速度 (mm/s, 与 poses 等长)。None 时整批统一用 velocity。
         :return: 返回码
         """
         pass
@@ -289,7 +291,7 @@ class BaseRobotDriver(ABC):
         pass
 
     @abstractmethod
-    def go_home(self, wait: bool = True, velocity: Optional[float] = None, acc: Optional[float] = None) -> int:
+    def go_home(self, wait: bool = True, velocity: Optional[float] = None, acc: Optional[float] = None, target_joints: Optional[List[float]] = None) -> int:
         """返回原点运动"""
         pass
 
@@ -328,7 +330,8 @@ class BaseRobotDriver(ABC):
         DO 切换使用队列指令 (immediate=False)：与同批 MoveL 运动指令一起进入控制器算法队列
         按序执行，因此段间无需等待机械臂停止，整条轨迹保持 CP 平滑连续，仅在喷涂状态
         发生变化的边界下发一次 DO。调用方应已将相同 spraying 状态的相邻航点合并为一段。
-        :param segments: 分段列表，每段格式为 {"spraying": bool|"on"/"off", "poses": List[PoseLike]}
+        :param segments: 分段列表，每段格式为 {"spraying": bool|"on"/"off", "poses": List[PoseLike], "speeds": Optional[List[float]]}
+                         (speeds 与 poses 等长, 逐航点 mm/s; 缺省则整段统一用 velocity)
         :param velocity: 目标线速度 (mm/s)
         :param acc: 加速度 (%)
         :param dec: 减速度 (%)
@@ -364,6 +367,7 @@ class BaseRobotDriver(ABC):
                 tool_num=tool_num,
                 wait=(seg_idx == last_idx),
                 cp_ratio=cp_ratio,
+                speeds=seg.get("speeds"),
             )
             if res != 0:
                 logger.error(f"move_l_segments: Segment {seg_idx + 1} failed with error code {res}")

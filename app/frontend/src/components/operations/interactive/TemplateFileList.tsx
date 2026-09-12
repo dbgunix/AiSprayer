@@ -44,6 +44,8 @@ interface TemplateFileListProps {
   onSimulatePath?: (state: PathStateType, pathId?: number | null) => void;
   onExecutePath?: (fileName: string, state?: PathStateType, pathId?: number | null) => void;
   onSelectFile?: (fileName: string) => void;
+  bypassVerification?: boolean;
+  onToggleBypassVerification?: (val: boolean) => void;
 }
 
 export const TemplateFileList: React.FC<TemplateFileListProps> = ({
@@ -71,7 +73,16 @@ export const TemplateFileList: React.FC<TemplateFileListProps> = ({
   onSimulatePath,
   onExecutePath,
   onSelectFile,
+  bypassVerification,
+  onToggleBypassVerification,
 }) => {
+  const [internalBypass, setInternalBypass] = useState(false);
+  const isBypass = bypassVerification !== undefined ? bypassVerification : internalBypass;
+  const toggleBypass = () => {
+    const next = !isBypass;
+    if (onToggleBypassVerification) onToggleBypassVerification(next);
+    setInternalBypass(next);
+  };
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; fileName: string; state?: PathStateType } | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [confirmClean, setConfirmClean] = useState(false);
@@ -144,13 +155,13 @@ export const TemplateFileList: React.FC<TemplateFileListProps> = ({
   const canSimulateFile = (fileName: string | null) => {
     if (!fileName || !isPathYaml(fileName)) return false;
     const st = getFileState(fileName);
-    return !!st && hasRunnablePaths(fileName) && isStateVerifiedPass(st) && hasSimTrajectory(st);
+    return !!st && hasRunnablePaths(fileName) && (isBypass || (isStateVerifiedPass(st) && hasSimTrajectory(st)));
   };
 
   const canExecuteFile = (fileName: string | null) => {
     if (!fileName || !isPathYaml(fileName) || !robotConnected || isExecuting || isRobotMoving) return false;
     const st = getFileState(fileName);
-    return !!st && hasRunnablePaths(fileName) && isStateVerifiedPass(st) && hasSimTrajectory(st);
+    return !!st && hasRunnablePaths(fileName) && (isBypass || (isStateVerifiedPass(st) && hasSimTrajectory(st)));
   };
 
   // Determine current effective state for top bar actions
@@ -161,14 +172,16 @@ export const TemplateFileList: React.FC<TemplateFileListProps> = ({
   const isFailed = isStateVerifiedFailed(effectiveState);
   const hasSim = hasSimTrajectory(effectiveState);
 
-  // Validation: Simulation requires valid trajectory & not failed
-  const canSim = hasWaypoints && isPass && hasSim;
+  // Validation: Simulation requires valid trajectory (or bypass is enabled)
+  const canSim = hasWaypoints && (isBypass || (isPass && hasSim));
 
-  // Validation: Physical robot execution strictly requires robot connected + waypoints + verification PASS + trajectory + not executing + not moving
-  const canExec = robotConnected && hasWaypoints && isPass && hasSim && !isExecuting && !isRobotMoving;
+  // Validation: Physical robot execution strictly requires robot connected + waypoints + (verification PASS || bypass) + not executing + not moving
+  const canExec = robotConnected && hasWaypoints && !isExecuting && !isRobotMoving && (isBypass || (isPass && hasSim));
 
   const simTooltip = !hasWaypoints
     ? 'No Waypoints to Simulate'
+    : isBypass
+    ? `Play Simulation (${effectiveState.toUpperCase()} - Bypass Verification ON)`
     : isFailed
     ? 'Simulation Blocked: Kinematics Verification FAILED'
     : !isPass || !hasSim
@@ -183,6 +196,8 @@ export const TemplateFileList: React.FC<TemplateFileListProps> = ({
     ? 'Robot is Currently Moving'
     : !hasWaypoints
     ? 'No Waypoints to Execute'
+    : isBypass
+    ? `Execute MoveL on Robot (${effectiveState.toUpperCase()} - Direct Execution, Verification Bypassed)`
     : isFailed
     ? 'Execution Blocked: Kinematics Verification FAILED'
     : !isPass || !hasSim
@@ -348,6 +363,38 @@ export const TemplateFileList: React.FC<TemplateFileListProps> = ({
           </div>
 
           <div className="w-[1px] h-3 bg-slate-700 mx-0.5" />
+
+          {/* Switch: Bypass Verification Toggle */}
+          <div className="relative group flex items-center justify-center">
+            <button
+              type="button"
+              onClick={toggleBypass}
+              title={isBypass ? 'Bypass Verification: ON (Direct Execution)' : 'Bypass Verification: OFF (Require PASS)'}
+              className={`h-5 px-1.5 rounded-full flex items-center gap-1.5 border transition-all select-none ${
+                isBypass
+                  ? 'bg-amber-500/20 border-amber-500/60 text-amber-300 shadow-xs shadow-amber-500/20 hover:bg-amber-500/30'
+                  : 'bg-slate-800/80 border-slate-700/80 text-slate-400 hover:border-slate-600 hover:text-slate-300'
+              }`}
+            >
+              <span
+                className={`w-4 h-2 rounded-full p-0.5 transition-colors flex items-center ${
+                  isBypass ? 'bg-amber-500 justify-end' : 'bg-slate-600 justify-start'
+                }`}
+              >
+                <span className="w-1 h-1 rounded-full bg-white shadow-xs" />
+              </span>
+              <span className="text-[9px] font-semibold tracking-tight uppercase">
+                {isBypass ? 'Bypass' : 'Check'}
+              </span>
+            </button>
+            <div className="absolute top-full mt-2 hidden group-hover:flex flex-col items-center pointer-events-none z-50">
+              <div className="bg-slate-950/70 backdrop-blur-md border border-white/10 rounded-md px-1.5 py-0.5 shadow-xl text-[9px] text-slate-300 whitespace-nowrap">
+                {isBypass
+                  ? 'Bypass Verification: ON (Simulate & Execute directly without PASS check)'
+                  : 'Bypass Verification: OFF (Require Kinematics Verification PASS before execution)'}
+              </div>
+            </div>
+          </div>
 
           {/* Button 3: Simulate */}
           <div className="relative group flex items-center justify-center">

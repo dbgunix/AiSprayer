@@ -1,5 +1,6 @@
 #include "motion/verifier.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <iomanip>
 #include <sstream>
@@ -115,10 +116,41 @@ PathVerifyReport ChainVerifier::Verify(const PathItem& path,
 
   const auto dense = interp_.Interpolate(path.points);
   rep.total_interpolated = static_cast<int>(dense.size());
+  // ⑤-A 逐段(航点 i→i+1)最小速度缩放，用于生成执行侧建议速度剖面。
+  std::vector<double> seg_min_scale;
+  if (opt_.singularity_scaling && path.points.size() > 1)
+    seg_min_scale.assign(path.points.size() - 1, 1.0);
   bool prev[3] = {false, false, false};
 
   const JointVec q_ref = init_q.has_value() ? *init_q : DefaultSeed();
-  auto curr = kin_.BestIk(ToUrdfFlange(dense[0].T_gun), q_ref);
+  std::optional<JointVec> curr;
+  const Transform T_urdf_start = ToUrdfFlange(dense[0].T_gun);
+
+  // 自动选取无奇异风险（腕部/肘部正常）且距种子最近的健康分支，杜绝盲选入奇异死区
+  JointVec sols[8];
+  const int n_sols = kin_.Ik(T_urdf_start, sols);
+  double best_dist_safe = 1e300;
+  double best_dist_any = 1e300;
+  std::optional<JointVec> best_safe;
+  std::optional<JointVec> best_any;
+  for (int i = 0; i < n_sols; ++i) {
+    if (!kin_.IsJointValid(sols[i])) continue;
+    JointVec q_cand = sols[i];
+    for (int j = 0; j < 6; ++j) q_cand[j] = q_ref[j] + WrapPi(sols[i][j] - q_ref[j]);
+    if (!kin_.IsJointValid(q_cand)) q_cand = sols[i];
+
+    const double dist = (q_cand - q_ref).squaredNorm();
+    if (dist < best_dist_any) {
+      best_dist_any = dist;
+      best_any = q_cand;
+    }
+    const SingularityFlags risk = kin_.CheckSingularity(q_cand, T_urdf_start);
+    if (!risk.is_singular() && dist < best_dist_safe) {
+      best_dist_safe = dist;
+      best_safe = q_cand;
+    }
+  }
+  curr = best_safe.has_value() ? best_safe : best_any;
   if (!curr) {
     const Eigen::Vector3d loc = LocXyz(dense[0].T_gun);
     Issue iss;
@@ -169,13 +201,24 @@ PathVerifyReport ChainVerifier::Verify(const PathItem& path,
     const SingularityFlags risk = Diagnose(*next, pt.T_gun, static_cast<int>(step),
                                            pt.segment_index, rep.issues, prev, false);
 
-    if (pt.dt_sec > 1e-9) {
+    // ⑤-A 奇异自适应降速：按本步关节构型的 |sin(J5)| 折算线速度缩放系数(<1=减速)，
+    // 使近奇异段的关节角速度按执行侧真实降速后的值判定，而非名义线速度下的虚高值。
+    double speed_scale = 1.0;
+    if (opt_.singularity_scaling && !pt.is_jump) {
+      speed_scale = SingularitySpeedScale((*next)[4], Rad(opt_.singularity_ref_deg),
+                                          opt_.singularity_min_scale);
+      const int sg = pt.segment_index;
+      if (sg >= 0 && sg < static_cast<int>(seg_min_scale.size()))
+        seg_min_scale[sg] = std::min(seg_min_scale[sg], speed_scale);
+    }
+
+    if (!pt.is_jump && pt.dt_sec > 1e-9) {
       Eigen::Matrix<double, 6, 1> vel_deg;
       bool over = false;
       std::ostringstream bad;
       bool first_bad = true;
       for (int j = 0; j < 6; ++j) {
-        vel_deg[j] = std::abs(Deg(dq[j] / pt.dt_sec));
+        vel_deg[j] = std::abs(Deg(dq[j] / pt.dt_sec)) * speed_scale;
         if (vel_deg[j] > kin_.limits().max_vel_deg_s[j]) {
           over = true;
           if (!first_bad) bad << ", ";
@@ -201,6 +244,17 @@ PathVerifyReport ChainVerifier::Verify(const PathItem& path,
     }
     curr = next;
     rep.trajectory_q.push_back(*curr);
+  }
+
+  // ⑤-A 落盘逐航点建议速度：非奇异航点=名义线速度，近奇异航点按其所在段最小缩放压低。
+  if (opt_.singularity_scaling && path.points.size() > 1) {
+    const size_t n_wp = path.points.size();
+    rep.waypoint_speed_mm_s.assign(n_wp, opt_.speed_mm_s);
+    for (size_t i = 0; i + 1 < n_wp; ++i) {
+      rep.waypoint_speed_mm_s[i] =
+          std::round(opt_.speed_mm_s * seg_min_scale[i] * 10.0) / 10.0;
+    }
+    rep.waypoint_speed_mm_s[n_wp - 1] = rep.waypoint_speed_mm_s[n_wp - 2];
   }
 
   for (size_t i = 0; i < rep.trajectory_q.size() && i < dense.size(); ++i) {
