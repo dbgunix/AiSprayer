@@ -110,7 +110,7 @@ struct OptimizeOptions {
   bool enforce_vel_limit = true;   // false = 退化为旧行为（纯 Δq²，无速度约束）
   double vel_soft_ratio = 0.9;     // 关节角速度 ≤ 该比例 × 限速 的边不加罚（留 10% 余量）
   double vel_cost_weight = 40.0;   // 超软阈惩罚权重：cost += Σ (ratio - soft)² × 此值
-  double vel_hard_ratio = 1.15;    // 超该比例 × 限速 的边直接判不可行（0 = 不硬禁，仅加罚）
+  double vel_hard_ratio = 1.0;     // 可收紧硬阈；旧配置的 0 或 >1 不得放宽物理限速
 
   // ⑤-A 腕部奇异自适应降速：必须与传入 ChainVerifier 的 VerifyOptions 取同名同值，
   // 否则 DP 判不可行的边与终校按降速后判可行的边不一致。缩放模型见 SingularitySpeedScale。

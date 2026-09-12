@@ -262,60 +262,44 @@ int Cr5Kinematics::Ik(const Transform& T_urdf, JointVec* out_sols) const {
   return n;
 }
 
+std::optional<JointVec> Cr5Kinematics::NearestInLimits(
+    const JointVec& q, const JointVec& reference) const {
+  if (!q.allFinite() || !reference.allFinite()) return std::nullopt;
+  JointVec result;
+  for (int j = 0; j < 6; ++j) {
+    const double lo = std::ceil((limits_.min_rad[j] - kJointTol - q[j]) / (2.0 * kPi));
+    const double hi = std::floor((limits_.max_rad[j] + kJointTol - q[j]) / (2.0 * kPi));
+    if (lo > hi) return std::nullopt;
+    const double turns = std::clamp(std::round((reference[j] - q[j]) / (2.0 * kPi)), lo, hi);
+    result[j] = q[j] + turns * (2.0 * kPi);
+  }
+  return result;
+}
+
 int Cr5Kinematics::BestIkRaw(const double* T_urdf, const double* q_seed, const double* weights,
                              double* q_out) const {
   double sols[48];
   const int n = UrdfInverse(T_urdf, sols);
   double best_dist = 1e300;
   bool found = false;
-  double best[6];
-  const double w0 = weights ? weights[0] : 1.0;
-  const double w1 = weights ? weights[1] : 1.0;
-  const double w2 = weights ? weights[2] : 1.0;
-  const double w3 = weights ? weights[3] : 1.0;
-  const double w4 = weights ? weights[4] : 1.0;
-  const double w5 = weights ? weights[5] : 1.0;
-  const double ww[6] = {w0, w1, w2, w3, w4, w5};
-  const double* mn = limits_.min_rad.data();
-  const double* mx = limits_.max_rad.data();
-
+  const JointVec seed = Eigen::Map<const JointVec>(q_seed);
   for (int i = 0; i < n; ++i) {
-    const double* sol = sols + i * 6;
-    bool sol_ok = true;
-    for (int j = 0; j < 6; ++j) {
-      if (sol[j] < mn[j] - kJointTol || sol[j] > mx[j] + kJointTol) {
-        sol_ok = false;
-        break;
-      }
-    }
-    if (!sol_ok) continue;
-    double d[6];
-    double unwrapped[6];
+    const auto candidate = NearestInLimits(Eigen::Map<const JointVec>(sols + i * 6), seed);
+    if (!candidate) continue;
     double dist = 0.0;
     for (int j = 0; j < 6; ++j) {
-      d[j] = WrapPi(sol[j] - q_seed[j]);
-      unwrapped[j] = q_seed[j] + d[j];
-      dist += ww[j] * d[j] * d[j];
+      // Never wrap again after choosing a physically valid angle: a bounded
+      // J4 move from -179 to +179 degrees is 358 degrees, not -2 degrees.
+      const double delta = (*candidate)[j] - seed[j];
+      dist += (weights ? weights[j] : 1.0) * delta * delta;
     }
-    const double* cand = nullptr;
-    bool u_ok = true;
-    for (int j = 0; j < 6; ++j) {
-      if (unwrapped[j] < mn[j] - kJointTol || unwrapped[j] > mx[j] + kJointTol) {
-        u_ok = false;
-        break;
-      }
-    }
-    if (u_ok) cand = unwrapped;
-    else if (sol_ok) cand = sol;
-    if (cand != nullptr && dist < best_dist) {
+    if (dist < best_dist) {
       best_dist = dist;
-      std::memcpy(best, cand, 6 * sizeof(double));
+      std::memcpy(q_out, candidate->data(), 6 * sizeof(double));
       found = true;
     }
   }
-  if (!found) return 0;
-  std::memcpy(q_out, best, 6 * sizeof(double));
-  return 1;
+  return found ? 1 : 0;
 }
 
 std::optional<JointVec> Cr5Kinematics::BestIk(const Transform& T_urdf, const JointVec& q_seed,

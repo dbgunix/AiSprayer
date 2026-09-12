@@ -134,10 +134,9 @@ PathVerifyReport ChainVerifier::Verify(const PathItem& path,
   std::optional<JointVec> best_safe;
   std::optional<JointVec> best_any;
   for (int i = 0; i < n_sols; ++i) {
-    if (!kin_.IsJointValid(sols[i])) continue;
-    JointVec q_cand = sols[i];
-    for (int j = 0; j < 6; ++j) q_cand[j] = q_ref[j] + WrapPi(sols[i][j] - q_ref[j]);
-    if (!kin_.IsJointValid(q_cand)) q_cand = sols[i];
+    const auto candidate = kin_.NearestInLimits(sols[i], q_ref);
+    if (!candidate) continue;
+    const JointVec& q_cand = *candidate;
 
     const double dist = (q_cand - q_ref).squaredNorm();
     if (dist < best_dist_any) {

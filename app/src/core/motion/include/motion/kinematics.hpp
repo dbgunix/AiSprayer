@@ -35,6 +35,8 @@ class Cr5Kinematics {
                    JointVec* out_sols) const;
 
   bool IsJointValid(const JointVec& q) const;
+  // Closest equivalent angles inside the physical limits (rad), axis by axis.
+  std::optional<JointVec> NearestInLimits(const JointVec& q, const JointVec& reference) const;
   SingularityFlags CheckSingularity(const JointVec& q, const Transform& T_urdf) const;
   int IkBatch(const Transform* T, int n, JointVec* out, int* n_sols) const;
 

@@ -12,6 +12,7 @@ namespace motion {
 class ChainVerifier {
  public:
   ChainVerifier(const Cr5Kinematics& kin, const ToolOffset& tool, VerifyOptions opt);
+  const VerifyOptions& options() const { return opt_; }
 
   PathVerifyReport Verify(const PathItem& path, std::optional<JointVec> init_q) const;
   // init_q 只作用于第一条路径，后续路径以上一条的末关节续接（与 Python 侧链式验证一致）。

@@ -83,9 +83,9 @@ int main() {
 
   PathDocument path_092632;
   PathDocument path_104336;
-  CHECK(LoadPathYaml(root + "/data/template_group/2026-09-12_092632/scan.auto.path.yaml",
+  CHECK(LoadPathYaml(root + "/app/src/core/motion/tests/fixtures/092632-20260912.fixture",
                      path_092632, &error));
-  CHECK(LoadPathYaml(root + "/data/template_group/2026-09-12_104336/scan.auto.path.yaml",
+  CHECK(LoadPathYaml(root + "/app/src/core/motion/tests/fixtures/104336-20260912.fixture",
                      path_104336, &error));
   CHECK(path_092632.paths.size() == 1 && path_104336.paths.size() == 1);
   if (g_fail) return 1;
@@ -94,13 +94,15 @@ int main() {
   raw_spec.source = "raw";
   raw_spec.tol_deg = {10.0, 10.0, 180.0};
 
-  // 092632 has a continuous IK branch at its untouched orientations.  The
-  // optimizer must recognise it instead of manufacturing tilt.
+  // The 15-point 20:20 regression previously jumped 359.2 degrees at J4.
+  // In-envelope spin can preserve all normals while avoiding this branch.
   const PathItem& raw_092632 = path_092632.paths.front();
   const Anchor raw_anchor_092632 = ResolveAnchor(raw_spec, kin, raw_092632);
   const OptimizeResult kept =
       ViterbiOptimizer(kin, model.tool, Options(), &verifier).Optimize(raw_092632, raw_anchor_092632);
+  CHECK(raw_092632.points.size() == 15);
   CHECK(kept.verify.status == "PASS");
+  CHECK(kept.verify.issues.empty());
   CHECK(MaxPointing(raw_092632, kept.path) < 0.02);  // YAML stores RPY to 0.01 degree.
   CHECK(MaxRawEnvelopeOverflow(raw_092632, kept.path, raw_spec.tol_deg) < 1e-6);
 
@@ -113,6 +115,23 @@ int main() {
   CHECK(repaired.verify.status == "PASS");
   CHECK(MaxPointing(raw_104336, repaired.path) <= 10.1);
   CHECK(MaxRawEnvelopeOverflow(raw_104336, repaired.path, raw_spec.tol_deg) < 1e-6);
+
+  // The same continuity/velocity rules apply to a uniform reference envelope.
+  AnchorSpec global_spec = raw_spec;
+  global_spec.source = "config";
+  global_spec.ref_rpy_deg = {90.0, 0.0, 90.0};
+  for (const auto* raw : {&raw_092632, &raw_104336}) {
+    const Anchor global = ResolveAnchor(global_spec, kin, *raw);
+    const auto result = ViterbiOptimizer(kin, model.tool, Options(), &verifier).Optimize(*raw, global);
+    CHECK(result.verify.status == "PASS");
+    CHECK(result.verify.issues.empty());
+    for (size_t i = 0; i < raw->points.size(); ++i) {
+      CHECK((result.path.points[i].tcp_pose.translation() - raw->points[i].tcp_pose.translation()).norm() < 1e-12);
+      const auto relative = CtrlRpyDegFromRot(global.R->transpose() * result.path.points[i].tcp_pose.linear());
+      for (int axis = 0; axis < 3; ++axis)
+        CHECK(std::abs(Wrap180(relative[axis])) <= global_spec.tol_deg[axis] + 1e-6);
+    }
+  }
 
   // A zero envelope is an exact-pose request.  It must reject the same raw
   // waypoint rather than silently applying the recovery tilt.

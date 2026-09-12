@@ -242,8 +242,8 @@ void PrintOptimizeReport(std::ostream& os, const Cr5Kinematics& kin, const PathI
               result.adopted_tol_deg[2])
        << "°\n";
     os << "   说明: 每一档包络都包含于请求包络，而密集校验与容差无关，因此采纳解不会比\n"
-       << "         任何一档差（择优标尺: 校验状态 → 指向护栏 → 峰值/限速 → 指向偏量 → J）。\n"
-       << "         注意：收紧包络是用「指向偏量（喷嘴偏离表面法向）」换「峰值速度」，\n"
+       << "         任何一档差（择优标尺: 校验状态 → 指向护栏 → 指向偏量 → 峰值/限速 → J）。\n"
+       << "         在通过校验的档位中优先保持原始法向，其次比较峰值速度，\n"
        << "         涂层质量优先时用 --tol-ladder-max-pointing-deg 限制或 --no-tol-ladder 关闭。\n";
   }
 

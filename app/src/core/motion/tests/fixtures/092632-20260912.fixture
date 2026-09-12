@@ -1,0 +1,141 @@
+# Offline regression snapshot from 2026-09-12 after 20:20; no cached verification.
+coordinate_frame: base_link
+paths:
+- path_id: 1
+  name: Auto Path
+  points:
+  - index: 1
+    pixel: [486, 433]
+    surface_point_base_mm: [816.6, 229.9, 4.2]
+    surface_normal_base: [-0.907, 0.4164, 0.0636]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 680.55, y: 292.36, z: 13.74, rx: -180.0, ry: -86.36, rz: -24.66}
+    normal_2d_proj: [-112.3, -9.1]
+    spraying: 'on'
+    is_jump: false
+  - index: 2
+    pixel: [489, 347]
+    surface_point_base_mm: [812.27, 226.2, 100.74]
+    surface_normal_base: [-0.9068, 0.4204, 0.0312]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 676.25, y: 289.26, z: 105.42, rx: 179.56, ry: -88.21, rz: -24.44}
+    normal_2d_proj: [-112.4, -22.5]
+    spraying: 'on'
+    is_jump: false
+  - index: 3
+    pixel: [488, 262]
+    surface_point_base_mm: [792.4, 222.67, 190.8]
+    surface_normal_base: [-0.8999, 0.4359, -0.0114]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 657.41, y: 288.05, z: 189.09, rx: 3.84, ry: -89.34, rz: 150.31}
+    normal_2d_proj: [-118.8, -35.7]
+    spraying: 'on'
+    is_jump: false
+  - index: 4
+    pixel: [525, 252]
+    surface_point_base_mm: [763.4, 174.5, 193.5]
+    surface_normal_base: [-0.8871, 0.4562, -0.0696]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 630.33, y: 242.94, z: 183.07, rx: 0.41, ry: -86.01, rz: 152.38}
+    normal_2d_proj: [-120.5, -34.5]
+    spraying: 'off'
+    is_jump: true
+  - index: 5
+    pixel: [524, 338]
+    surface_point_base_mm: [774.9, 177.95, 105.29]
+    surface_normal_base: [-0.8854, 0.4355, -0.1626]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 642.09, y: 243.28, z: 80.89, rx: 0.61, ry: -80.64, rz: 153.19}
+    normal_2d_proj: [-117.8, 11.0]
+    spraying: 'on'
+    is_jump: false
+  - index: 6
+    pixel: [522, 431]
+    surface_point_base_mm: [789.0, 181.8, 7.58]
+    surface_normal_base: [-0.9048, 0.3558, -0.2339]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 653.28, y: 235.17, z: -27.5, rx: 3.61, ry: -76.45, rz: 154.82}
+    normal_2d_proj: [-97.3, 48.6]
+    spraying: 'on'
+    is_jump: false
+  - index: 7
+    pixel: [523, 513]
+    surface_point_base_mm: [812.5, 185.4, -84.6]
+    surface_normal_base: [-0.9346, 0.256, -0.247]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 672.31, y: 223.8, z: -121.65, rx: 8.95, ry: -75.52, rz: 155.44}
+    normal_2d_proj: [-82.3, 65.7]
+    spraying: 'on'
+    is_jump: false
+  - index: 8
+    pixel: [563, 512]
+    surface_point_base_mm: [790.5, 137.2, -79.5]
+    surface_normal_base: [-0.9588, 0.1402, -0.2469]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 646.67, y: 158.23, z: -116.53, rx: 15.35, ry: -75.17, rz: 155.83}
+    normal_2d_proj: [-54.9, 69.8]
+    spraying: 'off'
+    is_jump: true
+  - index: 9
+    pixel: [566, 421]
+    surface_point_base_mm: [778.02, 133.28, 18.71]
+    surface_normal_base: [-0.9746, -0.0181, -0.2231]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 631.83, y: 130.56, z: -14.75, rx: 25.5, ry: -75.69, rz: 154.86}
+    normal_2d_proj: [-30.7, 48.8]
+    spraying: 'on'
+    is_jump: false
+  - index: 10
+    pixel: [568, 326]
+    surface_point_base_mm: [768.0, 129.4, 117.67]
+    surface_normal_base: [-0.9693, -0.2017, -0.1405]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 622.6, y: 99.15, z: 96.59, rx: 46.33, ry: -78.26, rz: 144.82}
+    normal_2d_proj: [12.4, -3.2]
+    spraying: 'on'
+    is_jump: false
+  - index: 11
+    pixel: [571, 253]
+    surface_point_base_mm: [761.2, 126.5, 191.7]
+    surface_normal_base: [-0.9141, -0.3954, -0.0894]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 624.08, y: 67.19, z: 178.29, rx: 62.66, ry: -78.77, rz: 140.28}
+    normal_2d_proj: [38.1, -38.0]
+    spraying: 'on'
+    is_jump: false
+  - index: 12
+    pixel: [619, 257]
+    surface_point_base_mm: [781.6, 78.5, 192.7]
+    surface_normal_base: [-0.8039, -0.5799, -0.1318]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 661.01, y: -8.49, z: 172.93, rx: 54.89, ry: -76.75, rz: 160.19}
+    normal_2d_proj: [97.4, -11.7]
+    spraying: 'off'
+    is_jump: true
+  - index: 13
+    pixel: [616, 326]
+    surface_point_base_mm: [786.11, 81.3, 120.61]
+    surface_normal_base: [-0.7034, -0.6811, -0.2033]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 680.6, y: -20.87, z: 90.11, rx: 44.88, ry: -73.33, rz: 177.96}
+    normal_2d_proj: [104.2, 17.2]
+    spraying: 'on'
+    is_jump: false
+  - index: 14
+    pixel: [612, 418]
+    surface_point_base_mm: [792.3, 85.19, 21.72]
+    surface_normal_base: [-0.6512, -0.7082, -0.2725]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 694.61, y: -21.05, z: -19.16, rx: 37.67, ry: -69.86, rz: -172.04}
+    normal_2d_proj: [109.6, 44.6]
+    spraying: 'on'
+    is_jump: false
+  - index: 15
+    pixel: [609, 508]
+    surface_point_base_mm: [802.2, 89.0, -76.6]
+    surface_normal_base: [-0.6331, -0.7021, -0.3259]
+    standoff_distance_mm: 150.0
+    tcp_pose_base: {x: 707.23, y: -16.32, z: -125.49, rx: 32.74, ry: -67.2, rz: -166.94}
+    normal_2d_proj: [101.1, 73.8]
+    spraying: 'on'
+    is_jump: false

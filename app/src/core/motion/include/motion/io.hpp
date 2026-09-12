@@ -29,7 +29,7 @@ struct SprayingConfig {
   bool opt_enforce_vel_limit = true;
   double opt_vel_soft_ratio = 0.9;
   double opt_vel_cost_weight = 40.0;
-  double opt_vel_hard_ratio = 1.15;
+  double opt_vel_hard_ratio = 1.0;
   // ⑤-A 腕部奇异自适应降速（verifier 与 optimizer 同名同值，保证选边与终校口径一致）。
   bool singularity_scaling = false;
   double singularity_ref_deg = 25.0;

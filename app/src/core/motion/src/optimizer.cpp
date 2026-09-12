@@ -142,14 +142,6 @@ Eigen::Matrix3d ProjectToAnchor(const Eigen::Matrix3d& R_cand, const Eigen::Matr
   return R_anc * RotFromCtrlRpyDeg(clipped);
 }
 
-std::optional<JointVec> UnwrapOnto(const JointVec& q_sol, const JointVec& q_ref,
-                                   const Cr5Kinematics& kin) {
-  const JointVec q_u = q_ref + WrapPi(q_sol - q_ref);
-  if (kin.IsJointValid(q_u)) return q_u;
-  if (kin.IsJointValid(q_sol)) return q_sol;
-  return std::nullopt;
-}
-
 bool IsSafeQ(const Cr5Kinematics& kin, const JointVec& q, const Transform& T_gun,
              const ToolOffset& tool) {
   if (!kin.IsJointValid(q)) return false;
@@ -307,24 +299,15 @@ struct EdgeOut {
 
 EdgeOut CheckMoveL(const Cr5Kinematics& kin, const ToolOffset& tool, const OptimizeOptions& opt,
                    const DpNode& a, const DpNode& b, const JointVec& q_start, bool is_jump,
-                   std::unordered_map<int, std::vector<double>>& alpha_cache) {
+                   std::unordered_map<int, std::vector<double>>& alpha_cache,
+                   const VerifyOptions* verification) {
   EdgeOut out;
   if (is_jump) {
-    auto hint = UnwrapOnto(b.q_branch, q_start, kin);
+    auto hint = kin.NearestInLimits(b.q_branch, q_start);
     if (!hint) hint = b.q_branch;
     if (!IsSafeQ(kin, *hint, b.T, tool)) return out;
-    JointVec dq;
-    for (int j = 0; j < 6; ++j) {
-      const double span = kin.limits().max_rad[j] - kin.limits().min_rad[j];
-      const double unwrapped_j = q_start[j] + WrapPi((*hint)[j] - q_start[j]);
-      if (span > 2.0 * kPi + 0.1 || (unwrapped_j >= kin.limits().min_rad[j] - kJointTol &&
-                                     unwrapped_j <= kin.limits().max_rad[j] + kJointTol)) {
-        dq[j] = WrapPi((*hint)[j] - q_start[j]);
-      } else {
-        // 有界关节无法跨越 ±180° 硬件限位，其实际转动量为未环绕的真实角位移
-        dq[j] = (*hint)[j] - q_start[j];
-      }
-    }
+    // 有界关节不能跨硬件限位，已选定合法角度后使用真实角位移。
+    const JointVec dq = *hint - q_start;
     double cost = 0.0;
     for (int j = 0; j < 6; ++j) {
       const double d = Deg(dq[j]);
@@ -336,7 +319,7 @@ EdgeOut CheckMoveL(const Cr5Kinematics& kin, const ToolOffset& tool, const Optim
     return out;
   }
 
-  auto hint = UnwrapOnto(b.q_branch, q_start, kin);
+  auto hint = kin.NearestInLimits(b.q_branch, q_start);
   if (!hint) return out;
   if ((a.ew_family) != (b.ew_family)) return out;
 
@@ -349,7 +332,7 @@ EdgeOut CheckMoveL(const Cr5Kinematics& kin, const ToolOffset& tool, const Optim
   const double dt_seg = (opt.exec_speed_mm_s > 0.0) ? dist_mm / opt.exec_speed_mm_s : 0.0;
   double travel = 0.0;
   {
-    const JointVec dq = WrapPi(*hint - q_start);
+    const JointVec dq = (*hint - q_start);
     for (int j = 0; j < 6; ++j) travel = std::max(travel, std::abs(Deg(dq[j])));
   }
   const double travel_lim =
@@ -357,7 +340,10 @@ EdgeOut CheckMoveL(const Cr5Kinematics& kin, const ToolOffset& tool, const Optim
   if (travel > travel_lim) return out;
 
   const int n_est = static_cast<int>(std::lround(dist_mm / opt.movel_spacing_mm));
-  const int n_mid = std::min(opt.movel_checks_max, std::max(opt.movel_checks_min, n_est));
+  // Use exactly the verifier's TCP sample locations, including the endpoint.
+  const int n_mid = verification
+      ? std::max(1, static_cast<int>(std::ceil(dist_mm / verification->step_mm))) - 1
+      : std::min(opt.movel_checks_max, std::max(opt.movel_checks_min, n_est));
   const auto alphas = AlphasFor(n_mid, alpha_cache);
 
   MoveLQuery q;
@@ -372,6 +358,10 @@ EdgeOut CheckMoveL(const Cr5Kinematics& kin, const ToolOffset& tool, const Optim
   q.max_jump_rad = Rad(kBranchJumpDeg);
   q.match_rad = Rad(kEndBranchMatchDeg);
   q.weights = opt.joint_weights;
+  q.duration_sec = std::max(0.001, dt_seg);
+  q.singularity_scaling = opt.singularity_scaling;
+  q.singularity_ref_deg = opt.singularity_ref_deg;
+  q.singularity_min_scale = opt.singularity_min_scale;
   auto walk = SegmentChecker(kin, tool).Walk(q);
   if (!walk) return out;
   out.ok = true;
@@ -381,25 +371,15 @@ EdgeOut CheckMoveL(const Cr5Kinematics& kin, const ToolOffset& tool, const Optim
   // ⑤ 边内关节速度约束：把该段按执行线速度折算成真实 °/s。
   // 超硬阈(ratio > vel_hard_ratio) 的边直接判不可行 → DP 换 IK 分支或在包络内换姿态；
   // 超软阈(ratio > vel_soft_ratio) 的边加二次惩罚 → 未达硬阈时也倾向选更慢的链。
-  // 注意：此处用段两端关节差（持续型超速，如 J4~200°/s）折算，与校验器同口径。
-  if (opt.enforce_vel_limit && dt_seg > 1e-9) {
-    // ⑤-A 与校验器同口径：近奇异段执行侧会降速，dt 放大 1/scale，
-    // 故该边折算角速度按降速后评估，避免 DP 把奇异段误判为不可行而退到更差分支。
-    double eff_dt = dt_seg;
-    if (opt.singularity_scaling) {
-      const double sc = std::min(
-          SingularitySpeedScale(q_start[4], Rad(opt.singularity_ref_deg), opt.singularity_min_scale),
-          SingularitySpeedScale(out.q[4], Rad(opt.singularity_ref_deg), opt.singularity_min_scale));
-      if (sc > 0.0) eff_dt = dt_seg / sc;
-    }
-    const JointVec dq_seg = WrapPi(out.q - q_start);
+  // 逐插值步计算峰值 °/s，时间及奇异缩放与终校一致；端点平均值会漏掉局部超速。
+  if (opt.enforce_vel_limit) {
     double vel_pen = 0.0;
     bool over_hard = false;
     for (int j = 0; j < 6; ++j) {
       const double lim = kin.limits().max_vel_deg_s[j];
       if (lim <= 0.0) continue;
-      const double ratio = (std::abs(Deg(dq_seg[j])) / eff_dt) / lim;  // 峰值角速度 / 限速
-      if (opt.vel_hard_ratio > 0.0 && ratio > opt.vel_hard_ratio) {
+      const double ratio = walk->peak_vel_deg_s[j] / lim;  // 峰值角速度 / 限速
+      if (ratio > (opt.vel_hard_ratio > 0.0 ? std::min(1.0, opt.vel_hard_ratio) : 1.0)) {
         over_hard = true;
         break;
       }
@@ -448,9 +428,9 @@ std::string OptimizeOptions::Validate() const {
     if (!(exec_speed_mm_s > 0.0)) return "exec_speed_mm_s must be > 0 when enforce_vel_limit";
     if (!(vel_soft_ratio > 0.0) || vel_soft_ratio > 2.0) return "vel_soft_ratio must be within (0, 2]";
     if (!(vel_cost_weight >= 0.0)) return "vel_cost_weight must be >= 0";
-    if (vel_hard_ratio < 0.0) return "vel_hard_ratio must be >= 0 (0 = penalty only, no hard ban)";
+    if (vel_hard_ratio < 0.0) return "vel_hard_ratio must be >= 0 (0 uses the physical velocity limit)";
     if (vel_hard_ratio > 0.0 && vel_hard_ratio < vel_soft_ratio)
-      return "vel_hard_ratio must be >= vel_soft_ratio (or 0 to disable hard ban)";
+      return "vel_hard_ratio must be >= vel_soft_ratio (or 0 for the physical limit)";
   }
   if (singularity_scaling) {
     // |J5| 参考角必须在 (0,90]；缩放下限在 (0,1]（=1 等于不减速）。
@@ -476,7 +456,15 @@ std::string OptimizeOptions::Validate() const {
 
 ViterbiOptimizer::ViterbiOptimizer(const Cr5Kinematics& kin, const ToolOffset& tool,
                                    OptimizeOptions opt, const ChainVerifier* verifier)
-    : kin_(kin), tool_(tool), opt_(std::move(opt)), verifier_(verifier) {}
+    : kin_(kin), tool_(tool), opt_(std::move(opt)), verifier_(verifier) {
+  if (verifier_) {
+    const auto& verification = verifier_->options();
+    opt_.exec_speed_mm_s = verification.speed_mm_s;
+    opt_.singularity_scaling = verification.singularity_scaling;
+    opt_.singularity_ref_deg = verification.singularity_ref_deg;
+    opt_.singularity_min_scale = verification.singularity_min_scale;
+  }
+}
 
 OptimizeResult ViterbiOptimizer::OptimizeOnce(const PathItem& path, const Anchor& anchor,
                                              std::optional<JointVec> init_q,
@@ -533,7 +521,7 @@ OptimizeResult ViterbiOptimizer::OptimizeOnce(const PathItem& path, const Anchor
     double best_c = std::numeric_limits<double>::infinity();
     for (int j = 0; j < static_cast<int>(s0.size()); ++j) {
       const double c = s0[static_cast<size_t>(j)].pose_dev +
-                       WrapPi(s0[static_cast<size_t>(j)].q - q_seed).squaredNorm();
+                       (s0[static_cast<size_t>(j)].q - q_seed).squaredNorm();
       if (c < best_c) {
         best_c = c;
         best = j;
@@ -563,9 +551,9 @@ OptimizeResult ViterbiOptimizer::OptimizeOnce(const PathItem& path, const Anchor
 
   for (int j = 0; j < static_cast<int>(stages[0].size()); ++j) {
     auto& node = stages[0][static_cast<size_t>(j)];
-    auto q0 = UnwrapOnto(node.q, q_seed, kin_);
+    auto q0 = kin_.NearestInLimits(node.q, q_seed);
     if (!q0 || !IsSafeQ(kin_, *q0, node.T, tool_)) continue;
-    const JointVec d = WrapPi(*q0 - q_seed);
+    const JointVec d = (*q0 - q_seed);
     double extra = 0.0;
     for (int k = 0; k < 6; ++k) extra += opt_.joint_weights[k] * Deg(d[k]) * Deg(d[k]);
     dp_cost[0][static_cast<size_t>(j)] = node.pose_dev + 0.05 * extra;
@@ -597,7 +585,7 @@ OptimizeResult ViterbiOptimizer::OptimizeOnce(const PathItem& path, const Anchor
       for (int cj = 0; cj < static_cast<int>(curr.size()); ++cj) {
         ++out.tested;
         const EdgeOut e = CheckMoveL(kin_, tool_, opt_, prev, curr[static_cast<size_t>(cj)], q_prev,
-                                     is_jump, alpha_cache);
+                                     is_jump, alpha_cache, verifier_ ? &verifier_->options() : nullptr);
         if (!e.ok) continue;
         ++out.valid;
         const double total =
@@ -847,27 +835,25 @@ std::string FmtTol(const Eigen::Vector3d& t) {
 
 OptimizeResult ViterbiOptimizer::Optimize(const PathItem& path, const Anchor& anchor,
                                           std::optional<JointVec> init_q) const {
-  // In per-waypoint mode, retaining every original pose is the best possible
-  // normal result.  Test that exact chain before introducing any orientation
-  // freedom.  This also avoids changing a path that only needed a different IK
-  // branch.  If it is unreachable or fails dense verification, the regular
-  // envelope search below is allowed to repair it.
+  // Per-waypoint preflight permits only local Z spin within the requested
+  // envelope, preserving every original normal. Tilt is introduced only if
+  // no safe spin-only chain is found; all chains still undergo dense checks.
   if (!anchor.has_global() && verifier_ && opt_.dense_verify && path.points.size() >= 2) {
-    OptimizeOptions exact_opt = opt_;
-    exact_opt.grid_x = {0.0, 0.0, 1.0};
-    exact_opt.grid_y = {0.0, 0.0, 1.0};
-    exact_opt.grid_z = {0.0, 0.0, 1.0};
-    exact_opt.tol_ladder = false;
+    OptimizeOptions spin_opt = opt_;
+    spin_opt.grid_x = {0.0, 0.0, 1.0};
+    spin_opt.grid_y = {0.0, 0.0, 1.0};
+    spin_opt.grid_z = {0.0, 0.0, 1.0};
+    spin_opt.tol_ladder = false;
     try {
-      ViterbiOptimizer exact(kin_, tool_, exact_opt, verifier_);
-      OptimizeResult retained = exact.OptimizeOnce(path, anchor, init_q, " [原姿态预检]", false);
+      ViterbiOptimizer spin_only(kin_, tool_, spin_opt, verifier_);
+      OptimizeResult retained = spin_only.OptimizeOnce(path, anchor, init_q, " [法向保持预检]", false);
       if (retained.verify.status == "PASS") {
-        std::cerr << "✅ [SprayOpt] 原始姿态已形成安全连续逆解链；保留全部原始法向。\n"
+        std::cerr << "✅ [SprayOpt] 包络内自旋已形成安全连续逆解链；保留全部原始法向。\n"
                   << std::flush;
         return retained;
       }
     } catch (const std::exception&) {
-      // A strict nominal chain is only a preflight.  The requested envelope
+      // A spin-only chain is only a preflight.  The requested envelope
       // remains available for recovery below, where the actionable error is
       // reported if all candidates fail.
     }

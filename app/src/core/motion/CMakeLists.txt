@@ -60,6 +60,10 @@ add_executable(test_kinematics tests/test_kinematics.cpp)
 target_link_libraries(test_kinematics PRIVATE motion_core)
 add_test(NAME test_kinematics COMMAND test_kinematics)
 
+add_executable(test_continuity tests/test_continuity.cpp)
+target_link_libraries(test_continuity PRIVATE motion_core)
+add_test(NAME test_continuity COMMAND test_continuity)
+
 add_executable(test_golden_verify tests/test_golden_verify.cpp)
 target_link_libraries(test_golden_verify PRIVATE motion_io)
 target_compile_definitions(test_golden_verify PRIVATE REPO_ROOT="${REPO_ROOT}")

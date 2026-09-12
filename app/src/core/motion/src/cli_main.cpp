@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
   double ladder_max_pointing = 0.0;
   // ⑤ 边内关节速度约束（默认开）：CLI 显式传参 > 配置文件 > 默认值。
   bool no_opt_vel_limit = false;
-  double opt_vel_soft_ratio = 0.9, opt_vel_cost_weight = 40.0, opt_vel_hard_ratio = 1.15;
+  double opt_vel_soft_ratio = 0.9, opt_vel_cost_weight = 40.0, opt_vel_hard_ratio = 1.0;
   // ⑤-A 腕部奇异自适应降速（默认取配置，CLI 显式传参优先）。
   bool singularity_on = false;
   double sing_ref_deg = 25.0, sing_min_scale = 0.2;
@@ -124,7 +124,7 @@ int main(int argc, char** argv) {
   optimize->add_option("--opt-vel-cost-weight", opt_vel_cost_weight,
                        "超软阈惩罚权重：cost += Σ(ratio-soft)²×此值");
   optimize->add_option("--opt-vel-hard-ratio", opt_vel_hard_ratio,
-                       "硬禁阈值：角速度 > 此比例×限速 的边直接判不可行（0=只加罚不硬禁）");
+                       "Hard velocity ratio: values below 1 tighten the limit; 0 or values above 1 use the physical limit");
   optimize->add_flag("--singularity-scaling", singularity_on,
                      "开启腕部奇异自适应降速（|J5|→0 段按可操作度压低线速度）");
   optimize->add_option("--singularity-ref-deg", sing_ref_deg,
@@ -317,6 +317,7 @@ int main(int argc, char** argv) {
         return EmitError(2, "optimize", "input has no paths: " + input);
       }
       std::optional<motion::JointVec> last_q;
+      std::optional<motion::JointVec> opt_seed;
       motion::OptimizeResult last;
       double total_ms = 0.0;
       bool any_modified = false;
@@ -328,7 +329,10 @@ int main(int argc, char** argv) {
         out_doc.paths[i] = last.path;
         total_ms += last.elapsed_ms;
         any_modified = any_modified || last.modified;
-        if (!last.joints_rad.empty()) last_q = last.joints_rad.back();
+        if (!last.joints_rad.empty()) {
+          if (i == 0) opt_seed = last.joints_rad.front();
+          last_q = last.joints_rad.back();
+        }
       }
       last.elapsed_ms = total_ms;
       last.modified = any_modified;
@@ -344,8 +348,6 @@ int main(int argc, char** argv) {
       const Eigen::Vector3d adopted_tol =
           last.adopted_tol_deg.maxCoeff() > 0.0 ? last.adopted_tol_deg : spec.tol_deg;
       const bool ladder_applied = (adopted_tol - spec.tol_deg).cwiseAbs().maxCoeff() > 1e-9;
-      const std::optional<motion::JointVec> opt_seed =
-          last.joints_rad.empty() ? std::nullopt : std::make_optional(last.joints_rad[0]);
       auto all = verifier.VerifyAll(out_doc.paths, opt_seed);
       if (!output.empty()) {
         motion::PoiConfig poi;

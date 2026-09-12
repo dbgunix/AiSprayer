@@ -12,7 +12,7 @@ namespace motion {
 struct DenseStep {
   Transform T_gun;
   Transform T_flange_ctrl;
-  double dt_sec = 0.0;
+  double dt_sec = 0.0;  // Incoming interval; zero only at the initial point.
   int segment_index = 0;
   bool is_jump = false;
 };
@@ -42,11 +42,16 @@ struct MoveLQuery {
   double max_jump_rad = Rad(kBranchJumpDeg);
   double match_rad = Rad(kEndBranchMatchDeg);
   JointVec weights = JointVec::Ones();
+  double duration_sec = 0.0;
+  bool singularity_scaling = false;
+  double singularity_ref_deg = 25.0;
+  double singularity_min_scale = 0.2;
 };
 
 struct MoveLWalk {
   JointVec q_end = JointVec::Zero();
   double cost = 0.0;
+  JointVec peak_vel_deg_s = JointVec::Zero();
 };
 
 class SegmentChecker {
@@ -61,7 +66,8 @@ class SegmentChecker {
               const double* quat2, const double* q_start, const double* alphas, int n_alphas,
               const double* q_branch_end, int check_end_branch, double max_jump_rad,
               double match_rad, const double* weights, double deg2_from_rad2, double* q_end_out,
-              double* cost_out) const;
+              double* cost_out, const MoveLQuery* timing = nullptr,
+              JointVec* peak_vel_deg_s = nullptr) const;
 
  private:
   const Cr5Kinematics& kin_;

@@ -14,7 +14,7 @@ class ViterbiOptimizer {
                    OptimizeOptions opt, const ChainVerifier* verifier = nullptr);
 
   // 对一条路径做容差阶梯择优：请求包络 + 若干收紧档各跑一次 OptimizeOnce，
-  // 按「校验状态 → 峰值/限速比 → DP 代价 J」字典序取最优（标尺与容差无关）。
+  // 按「校验状态 → 指向护栏 → 指向偏量 → 峰值/限速比 → DP 代价 J」字典序取最优（标尺与容差无关）。
   // 关闭阶梯（opt.tol_ladder=false）时等价于只跑请求包络一次。
   OptimizeResult Optimize(const PathItem& path, const Anchor& anchor,
                           std::optional<JointVec> init_q = std::nullopt) const;
